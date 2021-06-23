@@ -33,13 +33,6 @@ VALUES (0, 1, 'name', 'SMF Default Theme'),
 	(0, 2, 'theme_dir', '{$sboarddir}/Themes/classic');
 ---#
 
----# Creating "collapsed_categories"...
-CREATE TABLE IF NOT EXISTS {$db_prefix}collapsed_categories (
-	ID_CAT tinyint(4) unsigned NOT NULL default '0',
-	ID_MEMBER mediumint(8) unsigned NOT NULL default '0',
-	PRIMARY KEY (ID_CAT, ID_MEMBER)
-) ENGINE=MyISAM;
----#
 
 ---# Creating and verifying "permissions"...
 CREATE TABLE IF NOT EXISTS {$db_prefix}permissions (
@@ -228,7 +221,7 @@ CREATE TABLE {$db_prefix}sessions (
 ---#
 
 ---# Verifying "settings"...
-ALTER IGNORE TABLE {$db_prefix}settings
+ALTER TABLE {$db_prefix}settings
 DROP PRIMARY KEY,
 ADD PRIMARY KEY (variable(30));
 ---#
@@ -768,9 +761,11 @@ ADD INDEX isSticky (isSticky);
 ---#
 
 ---# Updating indexes on "topics" (part 2)...
-ALTER IGNORE TABLE {$db_prefix}topics
-ADD UNIQUE INDEX lastMessage (ID_LAST_MSG, ID_BOARD),
-ADD UNIQUE INDEX firstMessage (ID_FIRST_MSG, ID_BOARD),
+ALTER TABLE {$db_prefix}topics
+ADD UNIQUE INDEX lastMessage (ID_LAST_MSG, ID_BOARD);
+ALTER TABLE {$db_prefix}topics
+ADD UNIQUE INDEX firstMessage (ID_FIRST_MSG, ID_BOARD);
+ALTER TABLE {$db_prefix}topics
 ADD UNIQUE INDEX poll (ID_POLL, ID_TOPIC);
 ---#
 
@@ -1006,7 +1001,7 @@ LIMIT 1;
 ---#
 
 ---# Adding new columns to "instant_messages"...
-ALTER IGNORE TABLE {$db_prefix}instant_messages
+ALTER TABLE {$db_prefix}instant_messages
 ADD COLUMN deletedBySender tinyint(3) unsigned NOT NULL default '0' AFTER ID_MEMBER_FROM;
 ---#
 
@@ -1847,17 +1842,8 @@ VALUES
 	('cal_showeventsonindex', '0'),
 	('cal_showbdaysonindex', '0'),
 	('cal_showholidaysonindex', '0'),
+	('cal_showweeknum', '0'),
 	('cal_maxspan', '7'),
-	('cal_highlight_events', '3'),
-	('cal_highlight_holidays', '3'),
-	('cal_highlight_birthdays', '3'),
-	('cal_disable_prev_next', '0'),
-	('cal_display_type', '0'),
-	('cal_week_links', '2'),
-	('cal_prev_next_links', '1'),
-	('cal_short_days', '0'),
-	('cal_short_months', '0'),
-	('cal_week_numbers', '0'),
 	('smtp_host', ''),
 	('smtp_username', ''),
 	('smtp_password', ''),
@@ -1873,7 +1859,6 @@ VALUES
 	('theme_allow', '1'),
 	('theme_default', '1'),
 	('theme_guests', '1'),
-	('enableEmbeddedFlash', '0'),
 	('xmlnews_enable', '1'),
 	('xmlnews_maxlen', '255'),
 	('hotTopicPosts', '15'),
@@ -1924,7 +1909,7 @@ upgrade_query("
 		('enableBBC', '" . (!isset($GLOBALS['enable_ubbc']) ? 1 : $GLOBALS['enable_ubbc']) . "'),
 		('max_messageLength', '" . (empty($GLOBALS['MaxMessLen']) ? 10000 : $GLOBALS['MaxMessLen']) . "'),
 		('max_signatureLength', '" . @$GLOBALS['MaxSigLen'] . "'),
-		('spamWaitTime', '" . @$GLOBALS['timeout'] . "'),
+		('spamWaitTime', '" . (empty($GLOBALS['timeout']) ? 5 : $GLOBALS['timeout']) . "'),
 		('avatar_directory', '" . (isset($GLOBALS['facesdir']) ? fixRelativePath($GLOBALS['facesdir']) : fixRelativePath('./avatars')) . "'),
 		('avatar_url', '" . @$GLOBALS['facesurl'] . "'),
 		('avatar_max_height_external', '" . @$GLOBALS['userpic_height'] . "'),
@@ -1934,7 +1919,7 @@ upgrade_query("
 		('defaultMaxMessages', '" . (empty($GLOBALS['maxmessagedisplay']) ? 15 : $GLOBALS['maxmessagedisplay']) . "'),
 		('defaultMaxTopics', '" . (empty($GLOBALS['maxdisplay']) ? 20 : $GLOBALS['maxdisplay']) . "'),
 		('defaultMaxMembers', '" . (empty($GLOBALS['MembersPerPage']) ? 20 : $GLOBALS['MembersPerPage']) . "'),
-		('time_offset', '" . @$GLOBALS['timeoffset'] . "'),
+		('time_offset', '" . (empty($GLOBALS['timeoffset']) ? 0 : $GLOBALS['timeoffset']) . "'),
 		('cookieTime', '" . (empty($GLOBALS['Cookie_Length']) ? 60 : $GLOBALS['Cookie_Length']) . "'),
 		('requireAgreement', '" . @$GLOBALS['RegAgree'] . "')");
 ---}
@@ -2023,4 +2008,8 @@ FROM {$db_prefix}topics;
 REPLACE INTO {$db_prefix}settings
 	(variable, value)
 VALUES ('cal_today_updated', '00000000');
+
+REPLACE INTO {$db_prefix}settings
+	(variable, value)
+VALUES ('enable_password_conversion', '1');
 ---#

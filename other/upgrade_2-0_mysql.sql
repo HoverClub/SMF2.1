@@ -71,10 +71,6 @@ $nameChanges = array(
 		'catOrder' => 'catOrder cat_order tinyint(4) NOT NULL default \'0\'',
 		'canCollapse' => 'canCollapse can_collapse tinyint(1) NOT NULL default \'1\'',
 	),
-	'collapsed_categories' => array(
-		'ID_MEMBER' => 'ID_MEMBER id_member mediumint(8) unsigned NOT NULL default \'0\'',
-		'ID_CAT' => 'ID_CAT id_cat tinyint(4) unsigned NOT NULL',
-	),
 	'custom_fields' => array(
 		'ID_FIELD' => 'ID_FIELD id_field smallint(5) NOT NULL auto_increment',
 		'colName' => 'colName col_name varchar(12) NOT NULL default \'\'',
@@ -460,24 +456,26 @@ INSERT IGNORE INTO {$db_prefix}spiders
 VALUES
 	(1, 'Google', 'googlebot', ''),
 	(2, 'Yahoo!', 'slurp', ''),
-	(3, 'MSN', 'msnbot', ''),
+	(3, 'Bing', 'bingbot', ''),
 	(4, 'Google (Mobile)', 'Googlebot-Mobile', ''),
 	(5, 'Google (Image)', 'Googlebot-Image', ''),
 	(6, 'Google (AdSense)', 'Mediapartners-Google', ''),
 	(7, 'Google (Adwords)', 'AdsBot-Google', ''),
 	(8, 'Yahoo! (Mobile)', 'YahooSeeker/M1A1-R2D2', ''),
 	(9, 'Yahoo! (Image)', 'Yahoo-MMCrawler', ''),
-	(10, 'MSN (Mobile)', 'MSNBOT_Mobile', ''),
-	(11, 'MSN (Media)', 'msnbot-media', ''),
-	(12, 'Cuil', 'twiceler', ''),
-	(13, 'Ask', 'Teoma', ''),
-	(14, 'Baidu', 'Baiduspider', ''),
-	(15, 'Gigablast', 'Gigabot', ''),
-	(16, 'InternetArchive', 'ia_archiver-web.archive.org', ''),
-	(17, 'Alexa', 'ia_archiver', ''),
-	(18, 'Omgili', 'omgilibot', ''),
-	(19, 'EntireWeb', 'Speedy Spider', ''),
-	(20, 'Yandex', 'yandex', '');
+	(10, 'Bing (Preview)', 'BingPreview', ''),
+	(11, 'Bing (Ads)', 'adidxbot', ''),
+	(12, 'Bing (MSNBot)', 'msnbot', ''),
+	(13, 'Bing (Media)', 'msnbot-media', ''),
+	(14, 'Cuil', 'twiceler', ''),
+	(15, 'Ask', 'Teoma', ''),
+	(16, 'Baidu', 'Baiduspider', ''),
+	(17, 'Gigablast', 'Gigabot', ''),
+	(18, 'InternetArchive', 'ia_archiver-web.archive.org', ''),
+	(19, 'Alexa', 'ia_archiver', ''),
+	(20, 'Omgili', 'omgilibot', ''),
+	(21, 'EntireWeb', 'Speedy Spider', ''),
+	(22, 'Yandex', 'yandex', '');
 ---#
 
 ---# Removing a spider.
@@ -715,13 +713,13 @@ if (!isset($modSettings['cal_showholidays']) || !isset($modSettings['cal_showbda
 
 ---# Adjusting calendar maximum year...
 ---{
-if (!isset($modSettings['cal_maxyear']) || $modSettings['cal_maxyear'] == '2010')
+if (!isset($modSettings['cal_maxyear']) || $modSettings['cal_maxyear'] < 2030)
 {
 	upgrade_query("
 		REPLACE INTO {$db_prefix}settings
 			(variable, value)
 		VALUES
-			('cal_maxyear', '2020')");
+			('cal_maxyear', '2030')");
 }
 ---}
 ---#
@@ -829,6 +827,19 @@ foreach ($themeLayerChanges as $id_theme => $data)
 ---# Adding index to log_notify table...
 ALTER TABLE {$db_prefix}log_notify
 ADD INDEX id_topic (id_topic, id_member);
+---#
+
+---# GDPR compliance settings.
+---{
+if (!isset($modSettings['requirePolicyAgreement']))
+{
+	upgrade_query("
+		INSERT INTO {$db_prefix}settings
+			(variable, value)
+		VALUES
+			('requirePolicyAgreement', '0')");
+}
+---}
 ---#
 
 /******************************************************************************/
@@ -1216,6 +1227,7 @@ UPDATE {$db_prefix}attachments
 SET fileext = LOWER(SUBSTRING(filename, 1 - (INSTR(REVERSE(filename), '.'))))
 WHERE fileext = ''
 	AND INSTR(filename, '.')
+	AND INSTR(REVERSE(filename), '.') < 10
 	AND attachment_type != 3;
 ---#
 
@@ -1509,7 +1521,6 @@ INSERT IGNORE INTO {$db_prefix}scheduled_tasks
 	(next_time, time_offset, time_regularity, time_unit, disabled, task)
 VALUES
 	(0, 0, 2, 'h', 0, 'approval_notification'),
-	(0, 0, 7, 'd', 0, 'auto_optimize'),
 	(0, 60, 1, 'd', 0, 'daily_maintenance'),
 	(0, 0, 1, 'd', 0, 'daily_digest'),
 	(0, 0, 1, 'w', 0, 'weekly_digest'),
@@ -1520,7 +1531,7 @@ VALUES
 ---# Adding the simple machines scheduled task.
 ---{
 // Randomise the time.
-$randomTime = 82800 + rand(0, 86399);
+$randomTime = 82800 + mt_rand(0, 86399);
 upgrade_query("
 	INSERT IGNORE INTO {$db_prefix}scheduled_tasks
 		(next_time, time_offset, time_regularity, time_unit, disabled, task)
@@ -1737,7 +1748,7 @@ if ($profileCount == 0)
 	// Update the board tables.
 	foreach ($board_updates as $profile => $boards)
 	{
-		if (empty($boards))
+		if (empty($boards) || empty($profile))
 			continue;
 
 		$boards = implode(',', $boards);
@@ -2155,7 +2166,7 @@ WHERE id_pm_head = 0;
 --- Adding Open ID support.
 /******************************************************************************/
 
----# Adding Open ID Assocation table...
+---# Adding Open ID Association table...
 CREATE TABLE IF NOT EXISTS {$db_prefix}openid_assoc (
 	server_url text NOT NULL,
 	handle varchar(255) NOT NULL default '',
@@ -2640,7 +2651,7 @@ ADD COLUMN pm_receive_from tinyint(4) unsigned NOT NULL default '1';
 // Don't do this if we've done this already.
 if (empty($modSettings['dont_repeat_buddylists']))
 {
-	// Make sure the pm_receive_from column has the right default value - early adoptors might have a '0' set here.
+	// Make sure the pm_receive_from column has the right default value - early adopters might have a '0' set here.
 	upgrade_query("
 		ALTER TABLE {$db_prefix}members
 		CHANGE pm_receive_from pm_receive_from tinyint(3) unsigned NOT NULL default '1'");
@@ -2766,30 +2777,40 @@ if (!isset($modSettings['attachment_thumb_png']))
 if (file_exists($GLOBALS['boarddir'] . '/Themes/babylon'))
 {
 	$babylon_dir = $GLOBALS['boarddir'] . '/Themes/babylon';
-	$theme_request = upgrade_query("
-		SELECT ID_THEME
-		FROM {$db_prefix}themes
-		WHERE variable = 'theme_dir'
-			AND value ='$babylon_dir'");
+	$theme_request = $smcFunc['db_query']('', '
+		SELECT id_theme
+		FROM {db_prefix}themes
+		WHERE variable = {string:themedir}
+			AND value = {string:babylondir}',
+		array(
+			'themedir' => 'theme_dir',
+			'babylondir' => $babylon_dir,
+		)
+	);
 
 	// Don't do anything if this theme is already uninstalled
-	if (smf_mysql_num_rows($theme_request) == 1)
+	if ($smcFunc['db_num_rows']($theme_request) == 1)
 	{
-		$id_theme = mysql_result($theme_request, 0);
-		mysql_free_result($theme_request);
+		$row = $smcFunc['db_fetch_row']($theme_request);
+		$id_theme = $row[0];
+		$smcFunc['db_free_result']($theme_request);
+		unset($row);
 
-		$known_themes = explode(', ', $modSettings['knownThemes']);
+		$known_themes = explode(',', $modSettings['knownThemes']);
 
 		// Remove this value...
 		$known_themes = array_diff($known_themes, array($id_theme));
 
 		// Change back to a string...
-		$known_themes = implode(', ', $known_themes);
+		$known_themes = implode(',', $known_themes);
 
 		// Update the database
-		upgrade_query("
-			REPLACE INTO {$db_prefix}settings (variable, value)
-			VALUES ('knownThemes', '$known_themes')");
+		$smcFunc['db_insert']('replace',
+			'{db_prefix}settings',
+			array('variable' => 'string', 'value' => 'string'),
+			array('knownThemes', $known_themes),
+			array('variable')
+		);
 
 		// Delete any info about this theme
 		upgrade_query("
@@ -2809,10 +2830,12 @@ if (file_exists($GLOBALS['boarddir'] . '/Themes/babylon'))
 
 		if ($modSettings['theme_guests'] == $id_theme)
 		{
-			upgrade_query("
-				REPLACE INTO {$db_prefix}settings
-				(variable, value)
-				VALUES('theme_guests', 0)");
+			$smcFunc['db_insert']('replace',
+				'{db_prefix}settings',
+				array('variable' => 'string', 'value' => 'string'),
+				array('theme_guests', 0),
+				array('variable')
+			);
 		}
 	}
 }
@@ -2826,7 +2849,7 @@ if (file_exists($GLOBALS['boarddir'] . '/Themes/babylon'))
 ---# Installing new smiley sets...
 ---{
 // Don't do this twice!
-if (empty($modSettings['installed_new_smiley_sets_20']))
+if (empty($modSettings['dont_repeat_smileys_20']) && empty($modSettings['installed_new_smiley_sets_20']))
 {
 	// First, the entries.
 	upgrade_query("
@@ -2995,43 +3018,8 @@ ADD COLUMN email_address varchar(255) NOT NULL default '' AFTER membername;
 --- Adjusting group types.
 /******************************************************************************/
 
----# Fixing the group types.
----{
-// Get the admin group type.
-$request = upgrade_query("
-	SELECT group_type
-	FROM {$db_prefix}membergroups
-	WHERE id_group = 1
-	LIMIT 1");
-list ($admin_group_type) = smf_mysql_fetch_row($request);
-smf_mysql_free_result($request);
-
-// Not protected means we haven't updated yet!
-if ($admin_group_type != 1)
-{
-	// Increase by one.
-	upgrade_query("
-		UPDATE {$db_prefix}membergroups
-		SET group_type = group_type + 1
-		WHERE group_type > 0");
-}
----}
----#
-
 ---# Changing the group type for Administrator group.
 UPDATE {$db_prefix}membergroups
 SET group_type = 1
 WHERE id_group = 1;
----#
-
-/******************************************************************************/
---- Final clean up...
-/******************************************************************************/
-
----# Sorting the boards...
-ALTER TABLE {$db_prefix}categories
-ORDER BY cat_order;
-
-ALTER TABLE {$db_prefix}boards
-ORDER BY board_order;
 ---#

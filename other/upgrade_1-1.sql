@@ -377,7 +377,7 @@ if ((!isset($modSettings['smfVersion']) || $modSettings['smfVersion'] <= '1.1 RC
 // Do they have "classic" installed?
 if (file_exists($GLOBALS['boarddir'] . '/Themes/classic'))
 {
-	$classic_dir = $GLOBALS['boarddir'] . '/Themes/classic';
+	$classic_dir = smf_mysql_real_escape_string($GLOBALS['boarddir'] . '/Themes/classic');
 	$theme_request = upgrade_query("
 		SELECT ID_THEME
 		FROM {$db_prefix}themes
@@ -387,16 +387,16 @@ if (file_exists($GLOBALS['boarddir'] . '/Themes/classic'))
 	// Don't do anything if this theme is already uninstalled
 	if (smf_mysql_num_rows($theme_request) == 1)
 	{
-		$id_theme = mysql_result($theme_request, 0);
-		mysql_free_result($theme_request);
+		list($id_theme) = smf_mysql_fetch_row($theme_request);
+		smf_mysql_free_result($theme_request);
 
-		$known_themes = explode(', ', $modSettings['knownThemes']);
+		$known_themes = explode(',', $modSettings['knownThemes']);
 
 		// Remove this value...
 		$known_themes = array_diff($known_themes, array($id_theme));
 
 		// Change back to a string...
-		$known_themes = implode(', ', $known_themes);
+		$known_themes = implode(',', $known_themes);
 
 		// Update the database
 		upgrade_query("
@@ -768,7 +768,7 @@ VALUES
 /******************************************************************************/
 
 ---# Updating flood control log...
-ALTER IGNORE TABLE {$db_prefix}log_floodcontrol
+ALTER TABLE {$db_prefix}log_floodcontrol
 CHANGE COLUMN ip ip char(16) NOT NULL default '                ';
 
 ALTER TABLE {$db_prefix}log_floodcontrol
@@ -776,18 +776,22 @@ DROP INDEX logTime;
 ---#
 
 ---# Updating ip address storage...
-ALTER IGNORE TABLE {$db_prefix}log_actions
+ALTER TABLE {$db_prefix}log_actions
 CHANGE COLUMN IP ip char(16) NOT NULL default '                ';
 
-ALTER IGNORE TABLE {$db_prefix}log_banned
+ALTER TABLE {$db_prefix}log_banned
 CHANGE COLUMN IP ip char(16) NOT NULL default '                ';
 
-ALTER IGNORE TABLE {$db_prefix}log_banned
+ALTER TABLE {$db_prefix}log_banned
 DROP COLUMN ban_ids;
 
-ALTER IGNORE TABLE {$db_prefix}log_errors
-DROP INDEX IP,
-CHANGE COLUMN IP ip char(16) NOT NULL default '                ',
+ALTER TABLE {$db_prefix}log_errors
+DROP INDEX IP;
+
+ALTER TABLE {$db_prefix}log_errors
+CHANGE COLUMN IP ip char(16) NOT NULL default '                ';
+
+ALTER TABLE {$db_prefix}log_errors
 ADD INDEX ip (ip(16));
 ---#
 
@@ -855,7 +859,7 @@ while ($_GET['m'] < $totalMembers)
 			LEFT JOIN {$db_prefix}pm_recipients AS pmr ON (pmr.ID_MEMBER = mem.ID_MEMBER AND pmr.deleted = 0)
 		WHERE mem.ID_MEMBER > $_GET[m]
 			AND mem.ID_MEMBER <= $_GET[m] + 128
-		GROUP BY mem.ID_MEMBER
+		GROUP BY mem.ID_MEMBER, mem.instantMessages
 		HAVING instantMessages_real != instantMessages
 		LIMIT 256");
 	while ($row = smf_mysql_fetch_assoc($mrequest))
@@ -893,7 +897,7 @@ while ($_GET['m'] < $totalMembers)
 			LEFT JOIN {$db_prefix}pm_recipients AS pmr ON (pmr.ID_MEMBER = mem.ID_MEMBER AND pmr.deleted = 0 AND pmr.is_read = 0)
 		WHERE mem.ID_MEMBER > $_GET[m]
 			AND mem.ID_MEMBER <= $_GET[m] + 128
-		GROUP BY mem.ID_MEMBER
+		GROUP BY mem.ID_MEMBER, mem.unreadMessages
 		HAVING unreadMessages_real != unreadMessages
 		LIMIT 256");
 	while ($row = smf_mysql_fetch_assoc($mrequest))
@@ -1009,8 +1013,8 @@ if (!$has_attachmentType_column)
 	$ID_MSG = array();
 	while ($row = smf_mysql_fetch_assoc($request))
 	{
-		$clean_name = strtr($row['filename'], 'ŠŽšžŸÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöøùúûüýÿ', 'SZszYAAAAAACEEEEIIIINOOOOOOUUUUYaaaaaaceeeeiiiinoooooouuuuyy');
-		$clean_name = strtr($clean_name, array('Þ' => 'TH', 'þ' => 'th', 'Ð' => 'DH', 'ð' => 'dh', 'ß' => 'ss', 'Œ' => 'OE', 'œ' => 'oe', 'Æ' => 'AE', 'æ' => 'ae', 'µ' => 'u'));
+		$clean_name = strtr($row['filename'], 'Å Å½Å¡Å¾Å¸Ã€ÃÃ‚ÃƒÃ„Ã…Ã‡ÃˆÃ‰ÃŠÃ‹ÃŒÃÃŽÃÃ‘Ã’Ã“Ã”Ã•Ã–Ã˜Ã™ÃšÃ›ÃœÃÃ Ã¡Ã¢Ã£Ã¤Ã¥Ã§Ã¨Ã©ÃªÃ«Ã¬Ã­Ã®Ã¯Ã±Ã²Ã³Ã´ÃµÃ¶Ã¸Ã¹ÃºÃ»Ã¼Ã½Ã¿', 'SZszYAAAAAACEEEEIIIINOOOOOOUUUUYaaaaaaceeeeiiiinoooooouuuuyy');
+		$clean_name = strtr($clean_name, array('Ãž' => 'TH', 'Ã¾' => 'th', 'Ã' => 'DH', 'Ã°' => 'dh', 'ÃŸ' => 'ss', 'Å’' => 'OE', 'Å“' => 'oe', 'Ã†' => 'AE', 'Ã¦' => 'ae', 'Âµ' => 'u'));
 		$clean_name = preg_replace(array('/\s/', '/[^\w_\.\-]/'), array('_', ''), $clean_name);
 		$enc_name = $row['ID_ATTACH'] . '_' . strtr($clean_name, '.', '_') . md5($clean_name);
 		$clean_name = preg_replace('~\.[\.]+~', '.', $clean_name);
@@ -1107,8 +1111,8 @@ while ($row = smf_mysql_fetch_assoc($request))
 		$filename = $modSettings['custom_avatar_dir'] . '/' . $row['filename'];
 	else
 	{
-		$clean_name = strtr($row['filename'], 'ŠŽšžŸÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÑÒÓÔÕÖØÙÚÛÜÝàáâãäåçèéêëìíîïñòóôõöøùúûüýÿ', 'SZszYAAAAAACEEEEIIIINOOOOOOUUUUYaaaaaaceeeeiiiinoooooouuuuyy');
-		$clean_name = strtr($clean_name, array('Þ' => 'TH', 'þ' => 'th', 'Ð' => 'DH', 'ð' => 'dh', 'ß' => 'ss', 'Œ' => 'OE', 'œ' => 'oe', 'Æ' => 'AE', 'æ' => 'ae', 'µ' => 'u'));
+		$clean_name = strtr($row['filename'], 'Å Å½Å¡Å¾Å¸Ã€ÃÃ‚ÃƒÃ„Ã…Ã‡ÃˆÃ‰ÃŠÃ‹ÃŒÃÃŽÃÃ‘Ã’Ã“Ã”Ã•Ã–Ã˜Ã™ÃšÃ›ÃœÃÃ Ã¡Ã¢Ã£Ã¤Ã¥Ã§Ã¨Ã©ÃªÃ«Ã¬Ã­Ã®Ã¯Ã±Ã²Ã³Ã´ÃµÃ¶Ã¸Ã¹ÃºÃ»Ã¼Ã½Ã¿', 'SZszYAAAAAACEEEEIIIINOOOOOOUUUUYaaaaaaceeeeiiiinoooooouuuuyy');
+		$clean_name = strtr($clean_name, array('Ãž' => 'TH', 'Ã¾' => 'th', 'Ã' => 'DH', 'Ã°' => 'dh', 'ÃŸ' => 'ss', 'Å’' => 'OE', 'Å“' => 'oe', 'Ã†' => 'AE', 'Ã¦' => 'ae', 'Âµ' => 'u'));
 		$clean_name = preg_replace(array('/\s/', '/[^\w_\.\-]/'), array('_', ''), $clean_name);
 		$enc_name = $row['ID_ATTACH'] . '_' . strtr($clean_name, '.', '_') . md5($clean_name);
 		$clean_name = preg_replace('~\.[\.]+~', '.', $clean_name);
@@ -2069,7 +2073,7 @@ if ($upgradeLogTable)
 /******************************************************************************/
 
 ---# Preparing messages table for strict upgrade
-ALTER IGNORE TABLE {$db_prefix}messages
+ALTER TABLE {$db_prefix}messages
 DROP INDEX ipIndex;
 ---#
 
@@ -2442,7 +2446,7 @@ CHANGE COLUMN buddy_list buddy_list text NOT NULL;
 ---#
 
 /******************************************************************************/
---- Change some column types to accomodate more messages.
+--- Change some column types to accommodate more messages.
 /******************************************************************************/
 
 ---# Expanding message column size.

@@ -1,5 +1,5 @@
 <?php
-// Version: 2.1 Alpha 1; ManageMembers
+// Version: 2.1 RC3; ManageMembers
 
 global $context;
 
@@ -24,13 +24,16 @@ $txt['membergroups_new_as_type'] = 'by type';
 $txt['membergroups_new_as_copy'] = 'based off of';
 $txt['membergroups_new_copy_none'] = '(none)';
 $txt['membergroups_can_edit_later'] = 'You can edit them later.';
+$txt['membergroups_can_manage_access'] = 'This group can see all boards because they have the power to manage boards.';
+
+$txt['membergroups_cannot_delete_paid'] = 'This group cannot be deleted, it is currently in use by the following paid subscription(s): %1$s';
 
 $txt['membergroups_edit_group'] = 'Edit Membergroup';
 $txt['membergroups_edit_name'] = 'Group name';
-$txt['membergroups_edit_inherit_permissions'] = 'Inherit Permissions';
+$txt['membergroups_edit_inherit_permissions'] = 'Inherit permissions';
 $txt['membergroups_edit_inherit_permissions_desc'] = 'Select &quot;No&quot; to enable group to have own permission set.';
-$txt['membergroups_edit_inherit_permissions_no'] = 'No - Use Unique Permissions';
-$txt['membergroups_edit_inherit_permissions_from'] = 'Inherit From';
+$txt['membergroups_edit_inherit_permissions_no'] = 'No - Use unique permissions';
+$txt['membergroups_edit_inherit_permissions_from'] = 'Inherit from';
 $txt['membergroups_edit_hidden'] = 'Visibility';
 $txt['membergroups_edit_hidden_no'] = 'Visible';
 $txt['membergroups_edit_hidden_boardindex'] = 'Visible - Apart from in group key';
@@ -49,9 +52,12 @@ $txt['membergroups_min_posts'] = 'Required posts';
 $txt['membergroups_online_color'] = 'Color in online list';
 $txt['membergroups_icon_count'] = 'Number of icon images';
 $txt['membergroups_icon_image'] = 'Icon image filename';
-$txt['membergroups_icon_image_note'] = 'You can upload custom images to the default theme directory to be able to select them here.';
+$txt['membergroups_icon_image_note'] = 'You can upload custom images to the forum\'s default theme directory to be able to select them here. Different images can be used in different themes, just give them the same name.';
+$txt['membergroups_icon_image_size'] = 'Max size allowed 128x32px';
 $txt['membergroups_max_messages'] = 'Max personal messages';
 $txt['membergroups_max_messages_note'] = '0 = unlimited';
+$txt['membergroups_tfa_force'] = 'Force Two-Factor-Authentication (2FA) for this membergroup';
+$txt['membergroups_tfa_force_note'] = 'Be sure to warn your users before you activate this!';
 $txt['membergroups_edit_save'] = 'Save';
 $txt['membergroups_delete'] = 'Delete';
 $txt['membergroups_confirm_delete'] = 'Are you sure you want to delete this group?';
@@ -76,7 +82,7 @@ $txt['membergroups_postgroups'] = 'Post groups';
 $txt['membergroups_settings'] = 'Membergroup Settings';
 $txt['groups_manage_membergroups'] = 'Groups allowed to change membergroups';
 $txt['membergroups_select_permission_type'] = 'Select permission profile';
-$txt['membergroups_images_url'] = 'Themes/{theme}/images/membericons/';
+$txt['membergroups_images_url'] = 'Themes/default/images/membericons/';
 $txt['membergroups_select_visible_boards'] = 'Show boards';
 $txt['membergroups_members_top'] = 'Members';
 $txt['membergroups_name'] = 'Name';
@@ -94,7 +100,7 @@ $txt['admin_browse_email'] = 'Email Address';
 $txt['admin_browse_ip'] = 'IP Address';
 $txt['admin_browse_registered'] = 'Registered';
 $txt['admin_browse_id'] = 'ID';
-$txt['admin_browse_with_selected'] = 'With Selected';
+$txt['admin_browse_with_selected'] = 'With selected';
 $txt['admin_browse_no_members_approval'] = 'No members currently await approval.';
 $txt['admin_browse_no_members_activate'] = 'No members currently have not activated their accounts.';
 
@@ -108,6 +114,7 @@ $txt['admin_browse_w_reject'] = 'Reject';
 $txt['admin_browse_w_remind'] = 'Remind';
 $txt['admin_browse_w_approve_deletion'] = 'Approve (Delete Accounts)';
 $txt['admin_browse_w_email'] = 'and send email';
+$txt['admin_browse_no_email'] = '(no email)';
 $txt['admin_browse_w_approve_require_activate'] = 'Approve and require activation';
 
 $txt['admin_browse_filter_by'] = 'Filter By';
@@ -116,7 +123,7 @@ $txt['admin_browse_filter_type_0'] = 'Unactivated new accounts';
 $txt['admin_browse_filter_type_2'] = 'Unactivated email changes';
 $txt['admin_browse_filter_type_3'] = 'Unapproved new accounts';
 $txt['admin_browse_filter_type_4'] = 'Unapproved account deletions';
-$txt['admin_browse_filter_type_5'] = 'Unapproved "Under Age" Accounts';
+$txt['admin_browse_filter_type_5'] = 'Unapproved underage accounts';
 
 $txt['admin_browse_outstanding'] = 'Outstanding Members';
 $txt['admin_browse_outstanding_days_1'] = 'With all members who registered longer than';
@@ -129,4 +136,5 @@ $txt['dont_check_for_duplicate'] = 'Don\'t check for duplicates';
 $txt['duplicates'] = 'Duplicates';
 
 $txt['not_activated'] = 'Not activated';
+
 ?>

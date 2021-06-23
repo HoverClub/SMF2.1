@@ -37,11 +37,12 @@ hr {
 	color: #000;
 	background-color: #fff;
 }
-.windowbg2 {
-	color: #000;
-	background-color: #f1f1f1;
-}
 .copyright {
 	font-size: x-small;
+	text-align: center;
+	font-family: Verdana, sans-serif; /* Copyright must be Verdana! */
+}
+.centertext {
+	margin: 0 auto;
 	text-align: center;
 }

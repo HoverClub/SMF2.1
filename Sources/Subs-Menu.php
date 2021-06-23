@@ -6,11 +6,11 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
 if (!defined('SMF'))
@@ -18,13 +18,14 @@ if (!defined('SMF'))
 
 /**
  * Create a menu.
- * @param array $menuData
- * @param array $menuOptions = array()
- * @return boolean|array
+ *
+ * @param array $menuData An array of menu data
+ * @param array $menuOptions An array of menu options
+ * @return boolean|array False if nothing to show or an array of info about the selected menu item
  */
 function createMenu($menuData, $menuOptions = array())
 {
-	global $context, $settings, $options, $txt, $modSettings, $scripturl, $smcFunc, $user_info, $sourcedir, $options;
+	global $smcFunc, $context, $settings, $txt, $scripturl, $user_info;
 
 	/* Note menuData is array of form:
 
@@ -60,10 +61,16 @@ function createMenu($menuData, $menuOptions = array())
 	$context['menu_data_' . $context['max_menu_id']] = array();
 	$menu_context = &$context['menu_data_' . $context['max_menu_id']];
 
-	// What is the general action of this menu (i.e. $scripturl?action=XXXX.
+	// What is the general action of this menu? (i.e. $scripturl?action=XXXX)
 	$menu_context['current_action'] = isset($menuOptions['action']) ? $menuOptions['action'] : $context['current_action'];
 
-	// Allow extend *any* menu with a single hook
+	/* Allow extending *any* menu with a single hook.
+		For the sake of people searching for specific hooks, here are some common examples:
+			integrate_admin_areas
+			integrate_moderate_areas
+			integrate_pm_areas
+			integrate_profile_areas
+	*/
 	if (!empty($menu_context['current_action']))
 		call_integration_hook('integrate_' . $menu_context['current_action'] . '_areas', array(&$menuData));
 
@@ -82,6 +89,7 @@ function createMenu($menuData, $menuOptions = array())
 		$menu_context['extra_parameters'] .= ';' . $context['session_var'] . '=' . $context['session_id'];
 
 	$include_data = array();
+	$menu_context['sections'] = array();
 
 	// Now setup the context correctly.
 	foreach ($menuData as $section_id => $section)
@@ -113,6 +121,10 @@ function createMenu($menuData, $menuOptions = array())
 						if (!isset($menu_context['sections'][$section_id]))
 							$menu_context['sections'][$section_id]['title'] = $section['title'];
 
+						// Is there a counter amount to show for this section?
+						if (!empty($section['amt']))
+							$menu_context['sections'][$section_id]['amt'] = $section['amt'];
+
 						$menu_context['sections'][$section_id]['areas'][$area_id] = array('label' => isset($area['label']) ? $area['label'] : $txt[$area_id]);
 						// We'll need the ID as well...
 						$menu_context['sections'][$section_id]['id'] = $section_id;
@@ -120,32 +132,59 @@ function createMenu($menuData, $menuOptions = array())
 						if (isset($area['custom_url']))
 							$menu_context['sections'][$section_id]['areas'][$area_id]['url'] = $area['custom_url'];
 
+						// Is there a counter amount to show for this area?
+						if (!empty($area['amt']))
+							$menu_context['sections'][$section_id]['areas'][$area_id]['amt'] = $area['amt'];
+
 						// Does this area have its own icon?
 						if (!isset($area['force_menu_into_arms_of_another_menu']) && $user_info['name'] == 'iamanoompaloompa')
-							$menu_context['sections'][$section_id]['areas'][$area_id] = unserialize(base64_decode('YTozOntzOjU6ImxhYmVsIjtzOjEyOiJPb21wYSBMb29tcGEiO3M6MzoidXJsIjtzOjQzOiJodHRwOi8vZW4ud2lraXBlZGlhLm9yZy93aWtpL09vbXBhX0xvb21wYXM/IjtzOjQ6Imljb24iO3M6ODY6IjxpbWcgc3JjPSJodHRwOi8vd3d3LnNpbXBsZW1hY2hpbmVzLm9yZy9pbWFnZXMvb29tcGEuZ2lmIiBhbHQ9IkknbSBhbiBPb21wYSBMb29tcGEiIC8+Ijt9'));
-						elseif (isset($area['icon']))
-							$menu_context['sections'][$section_id]['areas'][$area_id]['icon'] = file_exists($settings['theme_dir'] . '/images/admin/' . $area['icon']) ? '<img src="' . $settings['images_url'] . '/admin/' . $area['icon'] . '" alt="" />&nbsp;&nbsp;' : '<img src="' . $settings['default_images_url'] . '/admin/' . $area['icon'] . '" alt="" />&nbsp;&nbsp;';
-						else
-							$menu_context['sections'][$section_id]['areas'][$area_id]['icon'] = '';
-
-						// Mod authors may wish to just set such an icon. Easy here, just drop in a URL.
-						if (!empty($menuOptions['do_big_icons']))
 						{
-							if (isset($area['bigicon']))
-								$menu_context['sections'][$section_id]['areas'][$area_id]['bigicon'] = $area['bigicon'];
-							// Otherwise we try to use the big icon, which has the same filename as the small one but in another folder.
-							elseif (isset($area['icon']))
+							$menu_context['sections'][$section_id]['areas'][$area_id] = $smcFunc['json_decode'](base64_decode('eyJsYWJlbCI6Ik9vbXBhIExvb21wYSIsInVybCI6Imh0dHBzOlwvXC9lbi53aWtpcGVkaWEub3JnXC93aWtpXC9Pb21wYV9Mb29tcGFzPyIsImljb24iOiI8aW1nIHNyYz1cImh0dHBzOlwvXC93d3cuc2ltcGxlbWFjaGluZXMub3JnXC9pbWFnZXNcL29vbXBhLmdpZlwiIGFsdD1cIkknbSBhbiBPb21wYSBMb29tcGFcIiBcLz4ifQ=='), true);
+						}
+						elseif (isset($area['icon']))
+						{
+							if (file_exists($settings['theme_dir'] . '/images/admin/' . $area['icon']))
+							{
+								$menu_context['sections'][$section_id]['areas'][$area_id]['icon'] = '<img src="' . $settings['images_url'] . '/admin/' . $area['icon'] . '" alt="">';
+							}
+							elseif (file_exists($settings['default_theme_dir'] . '/images/admin/' . $area['icon']))
+							{
+								$menu_context['sections'][$section_id]['areas'][$area_id]['icon'] = '<img src="' . $settings['default_images_url'] . '/admin/' . $area['icon'] . '" alt="">';
+							}
+							else
+								$menu_context['sections'][$section_id]['areas'][$area_id]['icon'] = '<span class="main_icons ' . $area['icon'] . '"></span>';
+						}
+						else
+							$menu_context['sections'][$section_id]['areas'][$area_id]['icon'] = '<span class="main_icons ' . $area_id . '"></span>';
+
+						if (isset($area['icon_class']) && empty($menu_context['sections'][$section_id]['areas'][$area_id]['icon']))
+						{
+							$menu_context['sections'][$section_id]['areas'][$area_id]['icon_class'] = $menu_context['current_action'] . '_menu_icon ' . $area['icon_class'];
+						}
+						elseif (isset($area['icon']))
+						{
+							if (substr($area['icon'], -4) === '.png' || substr($area['icon'], -4) === '.gif')
 							{
 								if (file_exists($settings['theme_dir'] . '/images/admin/big/' . $area['icon']))
-									$menu_context['sections'][$section_id]['areas'][$area_id]['bigicon'] = $settings['images_url'] . '/admin/big/' . $area['icon'];
+								{
+									$menu_context['sections'][$section_id]['areas'][$area_id]['icon_file'] = $settings['theme_url'] . '/images/admin/big/' . $area['icon'];
+								}
 								elseif (file_exists($settings['default_theme_dir'] . '/images/admin/big/' . $area['icon']))
-									$menu_context['sections'][$section_id]['areas'][$area_id]['bigicon'] = $settings['default_images_url'] . '/admin/big/' . $area['icon'];
+								{
+									$menu_context['sections'][$section_id]['areas'][$area_id]['icon_file'] = $settings['default_theme_url'] . '/images/admin/big/' . $area['icon'];
+								}
 							}
 
-							// They do need an icon. Have they got one?
-							if (empty($menu_context['sections'][$section_id]['areas'][$area_id]['bigicon']))
-								$menu_context['sections'][$section_id]['areas'][$area_id]['bigicon'] = $settings['default_images_url'] . '/admin/big/default.png';
+							$menu_context['sections'][$section_id]['areas'][$area_id]['icon_class'] = $menu_context['current_action'] . '_menu_icon ' . str_replace(array('.png', '.gif'), '', $area['icon']);
 						}
+						else
+							$menu_context['sections'][$section_id]['areas'][$area_id]['icon_class'] = $menu_context['current_action'] . '_menu_icon ' . str_replace(array('.png', '.gif'), '', $area_id);
+
+						// This is a shortcut for Font-Icon users so they don't have to re-do whole CSS.
+						$menu_context['sections'][$section_id]['areas'][$area_id]['plain_class'] = !empty($area['icon']) ? $area['icon'] : '';
+
+						// Some areas may be listed but not active, which we show as greyed out.
+						$menu_context['sections'][$section_id]['areas'][$area_id]['inactive'] = !empty($area['inactive']);
 
 						// Did it have subsections?
 						if (!empty($area['subsections']))
@@ -163,6 +202,10 @@ function createMenu($menuData, $menuOptions = array())
 									// Custom URL?
 									if (isset($sub['url']))
 										$menu_context['sections'][$section_id]['areas'][$area_id]['subsections'][$sa]['url'] = $sub['url'];
+
+									// Is there a counter amount to show for this subsection?
+									if (!empty($sub['amt']))
+										$menu_context['sections'][$section_id]['areas'][$area_id]['subsections'][$sa]['amt'] = $sub['amt'];
 
 									// A bit complicated - but is this set?
 									if ($menu_context['current_area'] == $area_id)
@@ -224,8 +267,32 @@ function createMenu($menuData, $menuOptions = array())
 		}
 	}
 
+	foreach ($menu_context['sections'] as $section_id => $section)
+	{
+		if (!empty($section['areas']))
+		{
+			foreach ($section['areas'] as $area_id => $area)
+			{
+				if (!empty($area['subsections']))
+				{
+					foreach ($area['subsections'] as $sa => $sub)
+					{
+						if (empty($sub['disabled']))
+							break;
+
+						$menu_context['sections'][$section_id]['areas'][$area_id]['hide_subsections'] = true;
+					}
+				}
+			}
+		}
+	}
+
 	// Should we use a custom base url, or use the default?
 	$menu_context['base_url'] = isset($menuOptions['base_url']) ? $menuOptions['base_url'] : $scripturl . '?action=' . $menu_context['current_action'];
+
+	// If we didn't find the area we were looking for go to a default one.
+	if (isset($backup_area) && empty($found_section))
+		$menu_context['current_area'] = $backup_area;
 
 	// If there are sections quickly goes through all the sections to check if the base menu has an url
 	if (!empty($menu_context['current_section']))
@@ -246,10 +313,6 @@ function createMenu($menuData, $menuOptions = array())
 			}
 	}
 
-	// If we didn't find the area we were looking for go to a default one.
-	if (isset($backup_area) && empty($found_section))
-		$menu_context['current_area'] = $backup_area;
-
 	// If still no data then return - nothing to show!
 	if (empty($menu_context['sections']))
 	{
@@ -262,12 +325,9 @@ function createMenu($menuData, $menuOptions = array())
 	}
 
 	// Almost there - load the template and add to the template layers.
-	if (!WIRELESS)
-	{
-		loadTemplate(isset($menuOptions['template_name']) ? $menuOptions['template_name'] : 'GenericMenu');
-		$menu_context['layer_name'] = (isset($menuOptions['layer_name']) ? $menuOptions['layer_name'] : 'generic_menu') . '_dropdown';
-		$context['template_layers'][] = $menu_context['layer_name'];
-	}
+	loadTemplate(isset($menuOptions['template_name']) ? $menuOptions['template_name'] : 'GenericMenu');
+	$menu_context['layer_name'] = (isset($menuOptions['layer_name']) ? $menuOptions['layer_name'] : 'generic_menu') . '_dropdown';
+	$context['template_layers'][] = $menu_context['layer_name'];
 
 	// Check we had something - for sanity sake.
 	if (empty($include_data))
@@ -286,8 +346,9 @@ function createMenu($menuData, $menuOptions = array())
 
 /**
  * Delete a menu.
- * @param string $menu_id = 'last'
- * @return boolean
+ *
+ * @param string $menu_id The ID of the menu to destroy or 'last' for the most recent one
+ * @return bool|void False if the menu doesn't exist, nothing otherwise
  */
 function destroyMenu($menu_id = 'last')
 {

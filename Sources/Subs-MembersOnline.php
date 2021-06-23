@@ -6,11 +6,11 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
 if (!defined('SMF'))
@@ -20,13 +20,14 @@ if (!defined('SMF'))
  * Retrieve a list and several other statistics of the users currently online.
  * Used by the board index and SSI.
  * Also returns the membergroups of the users that are currently online.
- * (optionally) hides members that chose to hide their online presense.
- * @param array $membersOnlineOptions
- * @return array
+ * (optionally) hides members that chose to hide their online presence.
+ *
+ * @param array $membersOnlineOptions An array of options for the list
+ * @return array An array of information about the online users
  */
 function getMembersOnlineStats($membersOnlineOptions)
 {
-	global $smcFunc, $context, $scripturl, $user_info, $modSettings, $txt;
+	global $smcFunc, $scripturl, $user_info, $modSettings, $txt;
 
 	// The list can be sorted in several ways.
 	$allowed_sort_options = array(
@@ -46,11 +47,10 @@ function getMembersOnlineStats($membersOnlineOptions)
 
 	// Not allowed sort method? Bang! Error!
 	elseif (!in_array($membersOnlineOptions['sort'], $allowed_sort_options))
-		trigger_error('Sort method for getMembersOnlineStats() function is not allowed', E_USER_NOTICE);
-
-	// Get it from the cache and send it back.
-	if (($temp = cache_get_data('membersOnlineStats-' . $membersOnlineOptions['sort'], 240)) !== null)
-		return $temp;
+	{
+		loadLanguage('Errors');
+		trigger_error($txt['get_members_online_stats_invalid_sort'], E_USER_NOTICE);
+	}
 
 	// Initialize the array that'll be returned later on.
 	$membersOnlineStats = array(
@@ -68,13 +68,13 @@ function getMembersOnlineStats($membersOnlineOptions)
 	$spiders = array();
 	$spider_finds = array();
 	if (!empty($modSettings['show_spider_online']) && ($modSettings['show_spider_online'] < 3 || allowedTo('admin_forum')) && !empty($modSettings['spider_name_cache']))
-		$spiders = unserialize($modSettings['spider_name_cache']);
+		$spiders = $smcFunc['json_decode']($modSettings['spider_name_cache'], true);
 
 	// Load the users online right now.
 	$request = $smcFunc['db_query']('', '
 		SELECT
 			lo.id_member, lo.log_time, lo.id_spider, mem.real_name, mem.member_name, mem.show_online,
-			mg.online_color, mg.id_group, mg.group_name
+			mg.online_color, mg.id_group, mg.group_name, mg.hidden, mg.group_type, mg.id_parent
 		FROM {db_prefix}log_online AS lo
 			LEFT JOIN {db_prefix}members AS mem ON (mem.id_member = lo.id_member)
 			LEFT JOIN {db_prefix}membergroups AS mg ON (mg.id_group = CASE WHEN mem.id_group = {int:reg_mem_group} THEN mem.id_post_group ELSE mem.id_group END)',
@@ -140,7 +140,10 @@ function getMembersOnlineStats($membersOnlineOptions)
 			$membersOnlineStats['online_groups'][$row['id_group']] = array(
 				'id' => $row['id_group'],
 				'name' => $row['group_name'],
-				'color' => $row['online_color']
+				'color' => $row['online_color'],
+				'hidden' => $row['hidden'],
+				'type' => $row['group_type'],
+				'parent' => $row['id_parent'],
 			);
 	}
 	$smcFunc['db_free_result']($request);
@@ -188,14 +191,13 @@ function getMembersOnlineStats($membersOnlineOptions)
 	// Hidden and non-hidden members make up all online members.
 	$membersOnlineStats['num_users_online'] = count($membersOnlineStats['users_online']) + $membersOnlineStats['num_users_hidden'] - (isset($modSettings['show_spider_online']) && $modSettings['show_spider_online'] > 1 ? count($spider_finds) : 0);
 
-	cache_put_data('membersOnlineStats-' . $membersOnlineOptions['sort'], $membersOnlineStats, 240);
-
 	return $membersOnlineStats;
 }
 
 /**
  * Check if the number of users online is a record and store it.
- * @param int $total_users_online
+ *
+ * @param int $total_users_online The total number of members online
  */
 function trackStatsUsersOnline($total_users_online)
 {

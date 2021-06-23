@@ -4,71 +4,48 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
 if (!defined('SMF'))
 	die('No direct access...');
 
 /**
- * Custom Search API class .. used when custom SMF index is used
+ * Used for the "custom search index" option
+ * Class custom_search
  */
-class custom_search
+class custom_search extends search_api
 {
 	/**
-	 *This is the last version of SMF that this was tested on, to protect against API changes.
-	 * @var type
-	 */
-	public $version_compatible = 'SMF 2.1 Alpha 1';
-
-	/**
-	 *This won't work with versions of SMF less than this.
-	 * @var type
-	 */
-	public $min_smf_version = 'SMF 2.1 Alpha 1';
-
-	/**
-	 * Is it supported?
-	 * @var type
-	 */
-	public $is_supported = true;
-
-	/**
-	 * Index Settings
-	 * @var type
+	 * @var array Index settings
 	 */
 	protected $indexSettings = array();
 
 	/**
-	 * What words are banned?
-	 * @var type
+	 * @var array An array of banned words
 	 */
 	protected $bannedWords = array();
 
 	/**
-	 * What is the minimum word length?
-	 * @var type
+	 * @var int|null Minimum word length (null for no minimum)
 	 */
 	protected $min_word_length = null;
 
 	/**
-	 * What databases support the custom index?
-	 * @var type
+	 * @var array Which databases support this method
 	 */
-	protected $supported_databases = array('mysql', 'mysqli', 'postgresql', 'sqlite');
+	protected $supported_databases = array('mysql', 'postgresql');
 
 	/**
-	 * constructor function
-	 *
-	 * @return type
+	 * Constructor function
 	 */
 	public function __construct()
 	{
-		global $modSettings, $db_type;
+		global $smcFunc, $modSettings, $db_type;
 
 		// Is this database supported?
 		if (!in_array($db_type, $this->supported_databases))
@@ -80,21 +57,18 @@ class custom_search
 		if (empty($modSettings['search_custom_index_config']))
 			return;
 
-		$this->indexSettings = unserialize($modSettings['search_custom_index_config']);
+		$this->indexSettings = $smcFunc['json_decode']($modSettings['search_custom_index_config'], true);
 
 		$this->bannedWords = empty($modSettings['search_stopwords']) ? array() : explode(',', $modSettings['search_stopwords']);
 		$this->min_word_length = $this->indexSettings['bytes_per_word'];
 	}
 
 	/**
-	 * Check whether the search can be performed by this API.
-	 *
-	 * @param type $methodName
-	 * @param type $query_params
-	 * @return boolean
+	 * {@inheritDoc}
 	 */
 	public function supportsMethod($methodName, $query_params = null)
 	{
+		$return = false;
 		switch ($methodName)
 		{
 			case 'isValid':
@@ -103,20 +77,23 @@ class custom_search
 			case 'indexedWordQuery':
 			case 'postCreated':
 			case 'postModified':
-				return true;
-			break;
+				$return = true;
+				break;
 
 			// All other methods, too bad dunno you.
 			default:
-				return false;
-			return;
+				$return = false;
 		}
+
+		// Maybe parent got support
+		if (!$return)
+			$return = parent::supportsMethod($methodName, $query_params);
+
+		return $return;
 	}
 
 	/**
-	 * If the settings don't exist we can't continue.
-	 *
-	 * @return type
+	 * {@inheritDoc}
 	 */
 	public function isValid()
 	{
@@ -126,16 +103,11 @@ class custom_search
 	}
 
 	/**
-	 * callback function for usort used to sort the fulltext results.
-	 * the order of sorting is: large words, small words, large words that
-	 * are excluded from the search, small words that are excluded.
-	 * @param string $a Word A
-	 * @param string $b Word B
-	 * @return int
+	 * {@inheritDoc}
 	 */
 	public function searchSort($a, $b)
 	{
-		global $modSettings, $excludedWords;
+		global $excludedWords;
 
 		$x = strlen($a) - (in_array($a, $excludedWords) ? 1000 : 0);
 		$y = strlen($b) - (in_array($b, $excludedWords) ? 1000 : 0);
@@ -144,14 +116,9 @@ class custom_search
 	}
 
 	/**
-	 * Do we have to do some work with the words we are searching for to prepare them?
-	 *
-	 * @param type $word
-	 * @param type $wordsSearch
-	 * @param type $wordsExclude
-	 * @param type $isExcluded
+	 * {@inheritDoc}
 	 */
-	public function prepareIndexes($word, &$wordsSearch, &$wordsExclude, $isExcluded)
+	public function prepareIndexes($word, array &$wordsSearch, array &$wordsExclude, $isExcluded)
 	{
 		global $modSettings, $smcFunc;
 
@@ -162,7 +129,7 @@ class custom_search
 
 		// Excluded phrases don't benefit from being split into subwords.
 		if (count($subwords) > 1 && $isExcluded)
-			continue;
+			return;
 		else
 		{
 			foreach ($subwords as $subword)
@@ -178,13 +145,9 @@ class custom_search
 	}
 
 	/**
-	 * Search for indexed words.
-	 *
-	 * @param type $words
-	 * @param type $search_data
-	 * @return type
+	 * {@inheritDoc}
 	 */
-	public function indexedWordQuery($words, $search_data)
+	public function indexedWordQuery(array $words, array $search_data)
 	{
 		global $modSettings, $smcFunc;
 
@@ -251,7 +214,7 @@ class custom_search
 			}
 		}
 
-		$ignoreRequest = $smcFunc['db_search_query']('insert_into_log_messages_fulltext', ($smcFunc['db_support_ignore'] ? ( '
+		$ignoreRequest = $smcFunc['db_search_query']('insert_into_log_messages_fulltext', ($smcFunc['db_support_ignore'] ? ('
 			INSERT IGNORE INTO {db_prefix}' . $search_data['insert_into'] . '
 				(' . implode(', ', array_keys($query_select)) . ')') : '') . '
 			SELECT ' . implode(', ', $query_select) . '
@@ -270,17 +233,13 @@ class custom_search
 	}
 
 	/**
-	 *  After a post is made, we update the search index database
-	 *
-	 * @param type $msgOptions
-	 * @param type $topicOptions
-	 * @param type $posterOptions
+	 * {@inheritDoc}
 	 */
-	public function postCreated($msgOptions, $topicOptions, $posterOptions)
+	public function postCreated(array &$msgOptions, array &$topicOptions, array &$posterOptions)
 	{
 		global $modSettings, $smcFunc;
 
-		$customIndexSettings = unserialize($modSettings['search_custom_index_config']);
+		$customIndexSettings = $smcFunc['json_decode']($modSettings['search_custom_index_config'], true);
 
 		$inserts = array();
 		foreach (text2words($msgOptions['body'], $customIndexSettings['bytes_per_word'], true) as $word)
@@ -296,19 +255,15 @@ class custom_search
 	}
 
 	/**
-	 * After a post is modified, we update the search index database.
-	 *
-	 * @param type $msgOptions
-	 * @param type $topicOptions
-	 * @param type $posterOptions
+	 * {@inheritDoc}
 	 */
-	public function postModified($msgOptions, $topicOptions, $posterOptions)
+	public function postModified(array &$msgOptions, array &$topicOptions, array &$posterOptions)
 	{
 		global $modSettings, $smcFunc;
 
 		if (isset($msgOptions['body']))
 		{
-			$customIndexSettings = unserialize($modSettings['search_custom_index_config']);
+			$customIndexSettings = $smcFunc['json_decode']($modSettings['search_custom_index_config'], true);
 			$stopwords = empty($modSettings['search_stopwords']) ? array() : explode(',', $modSettings['search_stopwords']);
 			$old_body = isset($msgOptions['old_body']) ? $msgOptions['old_body'] : '';
 

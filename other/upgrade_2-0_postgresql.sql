@@ -4,8 +4,8 @@
 --- Adding Open ID support.
 /******************************************************************************/
 
----# Adding Open ID Assocation table...
-CREATE TABLE {$db_prefix}openid_assoc (
+---# Adding Open ID Association table...
+CREATE TABLE IF NOT EXISTS {$db_prefix}openid_assoc (
 	server_url text NOT NULL,
 	handle varchar(255) NOT NULL,
 	secret text NOT NULL,
@@ -131,7 +131,7 @@ CREATE SEQUENCE {$db_prefix}spiders_seq;
 ---#
 
 ---# Creating spider table.
-CREATE TABLE {$db_prefix}spiders (
+CREATE TABLE IF NOT EXISTS {$db_prefix}spiders (
 	id_spider smallint NOT NULL default nextval('{$db_prefix}spiders_seq'),
 	spider_name varchar(255) NOT NULL,
 	user_agent varchar(255) NOT NULL,
@@ -139,26 +139,28 @@ CREATE TABLE {$db_prefix}spiders (
 	PRIMARY KEY (id_spider)
 );
 
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (1, 'Google', 'googlebot', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (2, 'Yahoo!', 'slurp', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (3, 'MSN', 'msnbot', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (4, 'Google (Mobile)', 'Googlebot-Mobile', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (5, 'Google (Image)', 'Googlebot-Image', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (6, 'Google (AdSense)', 'Mediapartners-Google', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (7, 'Google (Adwords)', 'AdsBot-Google', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (8, 'Yahoo! (Mobile)', 'YahooSeeker/M1A1-R2D2', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (9, 'Yahoo! (Image)', 'Yahoo-MMCrawler', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (10, 'MSN (Mobile)', 'MSNBOT_Mobile', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (11, 'MSN (Media)', 'msnbot-media', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (12, 'Cuil', 'twiceler', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (13, 'Ask', 'Teoma', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (14, 'Baidu', 'Baiduspider', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (15, 'Gigablast', 'Gigabot', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (16, 'InternetArchive', 'ia_archiver-web.archive.org', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (17, 'Alexa', 'ia_archiver', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (18, 'Omgili', 'omgilibot', '');
-INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (19, 'EntireWeb', 'Speedy Spider', '');
-INSERT INTO {$db_prefix}spiders (id_spider, spider_name, user_agent, ip_info) VALUES (20, 'Yandex', 'yandex', '');
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (1, 'Google', 'googlebot', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (2, 'Yahoo!', 'slurp', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (3, 'Bing', 'bingbot', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (4, 'Google (Mobile)', 'Googlebot-Mobile', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (5, 'Google (Image)', 'Googlebot-Image', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (6, 'Google (AdSense)', 'Mediapartners-Google', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (7, 'Google (Adwords)', 'AdsBot-Google', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (8, 'Yahoo! (Mobile)', 'YahooSeeker/M1A1-R2D2', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (9, 'Yahoo! (Image)', 'Yahoo-MMCrawler', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (10, 'Bing (Preview)', 'BingPreview', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (11, 'Bing (Ads)', 'adidxbot', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (12, 'Bing (MSNBot)', 'msnbot', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (13, 'Bing (Media)', 'msnbot-media', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (14, 'Cuil', 'twiceler', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (15, 'Ask', 'Teoma', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (16, 'Baidu', 'Baiduspider', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (17, 'Gigablast', 'Gigabot', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (18, 'InternetArchive', 'ia_archiver-web.archive.org', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (19, 'Alexa', 'ia_archiver', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (20, 'Omgili', 'omgilibot', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (21, 'EntireWeb', 'Speedy Spider', '') ON CONFLICT DO NOTHING;
+INSERT INTO {$db_prefix}spiders	(id_spider, spider_name, user_agent, ip_info) VALUES (22, 'Yandex', 'yandex', '') ON CONFLICT DO NOTHING;
 ---#
 
 ---# Removing a spider.
@@ -176,7 +178,7 @@ CREATE SEQUENCE {$db_prefix}log_spider_hits_seq;
 ---#
 
 ---# Creating spider hit tracking table.
-CREATE TABLE {$db_prefix}log_spider_hits (
+CREATE TABLE IF NOT EXISTS {$db_prefix}log_spider_hits (
 	id_hit int default nextval('{$db_prefix}log_spider_hits_seq'),
 	id_spider smallint NOT NULL default '0',
 	log_time int NOT NULL,
@@ -190,7 +192,7 @@ CREATE INDEX {$db_prefix}log_spider_hits_processed ON {$db_prefix}log_spider_hit
 ---#
 
 ---# Creating spider statistic table.
-CREATE TABLE {$db_prefix}log_spider_stats (
+CREATE TABLE IF NOT EXISTS {$db_prefix}log_spider_stats (
   id_spider smallint NOT NULL default '0',
   page_hits smallint NOT NULL default '0',
   last_seen int NOT NULL default '0',
@@ -202,6 +204,18 @@ CREATE TABLE {$db_prefix}log_spider_stats (
 /******************************************************************************/
 --- Adding new forum settings.
 /******************************************************************************/
+
+---# GDPR compliance settings.
+---{
+if (!isset($modSettings['requirePolicyAgreement']))
+{
+    upgrade_query("
+        INSERT INTO {$db_prefix}settings
+            (variable, value)
+        VALUES ('requirePolicyAgreement', '0')");
+}
+---}
+---#
 
 ---# Enable cache if upgrading from 2.0 beta 1 and lower.
 ---{
@@ -235,7 +249,7 @@ $smcFunc['db_insert']('ignore',
 	'{db_prefix}themes',
 	array('id_theme' => 'int', 'variable' => 'string-255', 'value' => 'string-255'),
 	array(1, 'forum_width', '90%'),
-	array('id_theme', 'variable', 'value')
+	array('id_theme', 'variable')
 );
 ---}
 ---#
@@ -248,12 +262,12 @@ $smcFunc['db_insert']('ignore',
 ALTER TABLE {$db_prefix}log_online DROP CONSTRAINT {$db_prefix}log_online_log_time;
 ALTER TABLE {$db_prefix}log_online DROP CONSTRAINT {$db_prefix}log_online_id_member;
 DROP TABLE {$db_prefix}log_online;
-CREATE TABLE {$db_prefix}log_online (
+CREATE TABLE IF NOT EXISTS {$db_prefix}log_online (
   session varchar(32) NOT NULL default '',
   log_time int NOT NULL default '0',
   id_member int NOT NULL default '0',
   id_spider smallint NOT NULL default '0',
-  ip int NOT NULL default '0',
+  ip bigint NOT NULL default '0',
   url text NOT NULL,
   PRIMARY KEY (session)
 );
@@ -362,7 +376,7 @@ else
 /******************************************************************************/
 
 ---# Adding weekly maintenance task...
-INSERT INTO {$db_prefix}scheduled_tasks (next_time, time_offset, time_regularity, time_unit, disabled, task) VALUES (0, 0, 1, 'w', 0, 'weekly_maintenance');
+	INSERT INTO {$db_prefix}scheduled_tasks (next_time, time_offset, time_regularity, time_unit, disabled, task) VALUES (0, 0, 1, 'w', 0, 'weekly_maintenance') ON CONFLICT DO NOTHING;
 ---#
 
 ---# Setting the birthday email template if not set...
@@ -383,7 +397,7 @@ if (!isset($modSettings['birthday_email']))
 /******************************************************************************/
 
 ---# Adding pruning option...
-INSERT INTO {$db_prefix}settings (variable, value) VALUES ('pruningOptions', '30,180,180,180,30');
+INSERT INTO {$db_prefix}settings (variable, value) VALUES ('pruningOptions', '30,180,180,180,30') ON CONFLICT DO NOTHING;
 ---#
 
 /******************************************************************************/
@@ -785,7 +799,7 @@ $smcFunc['db_remove_index']($db_prefix . 'log_activity', $db_prefix . 'log_activ
 // Don't do this if we've done this already.
 if (empty($modSettings['dont_repeat_buddylists']))
 {
-	// Make sure the pm_receive_from column has the right default value - early adoptors might have a '0' set here.
+	// Make sure the pm_receive_from column has the right default value - early adopters might have a '0' set here.
 	upgrade_query("
 		ALTER TABLE {$db_prefix}members
 		ALTER COLUMN pm_receive_from SET DEFAULT '1'");
@@ -916,192 +930,77 @@ if (!isset($modSettings['attachment_thumb_png']))
 ---#
 
 /******************************************************************************/
---- Installing new default theme...
+--- Cleaning up after old themes...
 /******************************************************************************/
 
----# Installing theme settings...
+---# Checking for "babylon" and removing it if necessary...
 ---{
-// This is Grudge's secret "I'm not a developer" theme install code - keep this quiet ;)
-
-// Firstly, I'm going out of my way to not do this twice!
-if ((!isset($modSettings['smfVersion']) || $modSettings['smfVersion'] <= '2.0 RC2') && empty($modSettings['dont_repeat_theme_core']))
+// Do they have "babylon" installed?
+if (file_exists($GLOBALS['boarddir'] . '/Themes/babylon'))
 {
-	// Check it's not already here, just in case.
-	$theme_request = upgrade_query("
+	$babylon_dir = $GLOBALS['boarddir'] . '/Themes/babylon';
+	$theme_request = $smcFunc['db_query']('', '
 		SELECT id_theme
-		FROM {$db_prefix}themes
-		WHERE variable = 'theme_dir'
-			AND value LIKE '%core'");
-	// Only do the upgrade if it doesn't find the theme already.
-	if ($smcFunc['db_num_rows']($theme_request) == 0)
+		FROM {db_prefix}themes
+		WHERE variable = {string:themedir}
+			AND value = {string:babylondir}',
+		array(
+			'themedir' => 'theme_dir',
+			'babylondir' => $babylon_dir,
+		)
+	);
+
+	// Don't do anything if this theme is already uninstalled
+	if ($smcFunc['db_num_rows']($theme_request) == 1)
 	{
-		// Try to get some settings from the current default theme.
-		$request = upgrade_query("
-			SELECT t1.value AS theme_dir, t2.value AS theme_url, t3.value AS images_url
-			FROM ({$db_prefix}themes AS t1, {$db_prefix}themes AS t2, {$db_prefix}themes AS t3)
-			WHERE t1.id_theme = 1
-				AND t1.id_member = 0
-				AND t1.variable = 'theme_dir'
-				AND t2.id_theme = 1
-				AND t2.id_member = 0
-				AND t2.variable = 'theme_url'
-				AND t3.id_theme = 1
-				AND t3.id_member = 0
-				AND t3.variable = 'images_url'
-			LIMIT 1");
-		if ($smcFunc['db_num_rows']($request) != 0)
-		{
-			$curve = $smcFunc['db_fetch_assoc']($request);
+		$row = $smcFunc['db_fetch_row']($theme_request);
+		$id_theme = $row[0];
+		$smcFunc['db_free_result']($theme_request);
+		unset($row);
 
-			if (substr_count($curve['theme_dir'], 'default') === 1)
-				$core['theme_dir'] = strtr($curve['theme_dir'], array('default' => 'core'));
-			if (substr_count($curve['theme_url'], 'default') === 1)
-				$core['theme_url'] = strtr($curve['theme_url'], array('default' => 'core'));
-			if (substr_count($curve['images_url'], 'default') === 1)
-				$core['images_url'] = strtr($curve['images_url'], array('default' => 'core'));
-		}
-		$smcFunc['db_free_result']($request);
+		$known_themes = explode(',', $modSettings['knownThemes']);
 
-		if (!isset($core['theme_dir']))
-			$core['theme_dir'] = addslashes($GLOBALS['boarddir']) . '/Themes/core';
-		if (!isset($core['theme_url']))
-			$core['theme_url'] = $GLOBALS['boardurl'] . '/Themes/core';
-		if (!isset($core['images_url']))
-			$core['images_url'] = $GLOBALS['boardurl'] . '/Themes/core/images';
+		// Remove this value...
+		$known_themes = array_diff($known_themes, array($id_theme));
 
-		// Get an available id_theme first...
-		$request = upgrade_query("
-			SELECT MAX(id_theme) + 1
-			FROM {$db_prefix}themes");
-		list ($id_core_theme) = $smcFunc['db_fetch_row']($request);
-		$smcFunc['db_free_result']($request);
+		// Change back to a string...
+		$known_themes = implode(',', $known_themes);
 
-		// Insert the core theme into the tables.
-		$smcFunc['db_insert']('ignore',
-			'{db_prefix}themes',
-				array('id_member' => 'int', 'id_theme' => 'int', 'variable' => 'string-255', 'value' => 'string-255'),
-				array(
-					array(0, $id_core_theme, 'name', 'Core Theme'),
-					array(0, $id_core_theme, 'theme_url', $core['theme_url']),
-					array(0, $id_core_theme, 'images_url', $core['images_url']),
-					array(0, $id_core_theme, 'theme_dir', $core['theme_dir'])
-				),
-				array()
+		// Update the database
+		$smcFunc['db_insert']('replace',
+			'{db_prefix}settings',
+			array('variable' => 'string', 'value' => 'string'),
+			array('knownThemes', $known_themes),
+			array('variable')
 		);
 
-		// Update the name of the default theme in the database.
+		// Delete any info about this theme
 		upgrade_query("
-			UPDATE {$db_prefix}themes
-			SET value = 'SMF Default Theme - Curve'
-			WHERE id_theme = 1
-				AND variable = 'name'");
+			DELETE FROM {$db_prefix}themes
+			WHERE id_theme = $id_theme");
 
-		$newSettings = array();
-		// Now that we have the old theme details - switch anyone who used the default to it (Make sense?!)
-		if (!empty($modSettings['theme_default']) && $modSettings['theme_default'] == 1)
-			$newSettings[] = "('theme_default', $id_core_theme)";
-		// Did guests use to use the default?
-		if (!empty($modSettings['theme_guests']) && $modSettings['theme_guests'] == 1)
-			$newSettings[] = "('theme_guests', $id_core_theme)";
-
-		// If known themes aren't set, let's just pick all themes available.
-		if (empty($modSettings['knownThemes']))
-		{
-			$request = upgrade_query("
-				SELECT DISTINCT id_theme
-				FROM {$db_prefix}themes");
-			$themes = array();
-			while ($row = $smcFunc['db_fetch_assoc']($request))
-				$themes[] = $row['id_theme'];
-			$modSettings['knownThemes'] = implode(',', $themes);
-			upgrade_query("
-				UPDATE {$db_prefix}settings
-				SET value = '$modSettings[knownThemes]'
-				WHERE variable = 'knownThemes'");
-		}
-
-		// Known themes.
-		$allThemes = explode(',', $modSettings['knownThemes']);
-		$allThemes[] = $id_core_theme;
-		$newSettings[] = "('knownThemes', '" . implode(',', $allThemes) . "')";
-
-		// Since we want to do a replace, just delete the old settings and re-insert them
-		upgrade_query("
-			DELETE FROM {$db_prefix}settings
-			WHERE variable IN ('theme_default', 'theme_guests', 'knownThemes')");
-
-		foreach ($new_settings AS $a_new_setting)
-		{
-			upgrade_query("
-				INSERT INTO {$db_prefix}settings
-				(variable, value)
-				VALUES " . implode(', ', $a_new_setting));
-		}
-
-		// What about members?
+		// Set any members or boards using this theme to the default
 		upgrade_query("
 			UPDATE {$db_prefix}members
-			SET id_theme = $id_core_theme
-			WHERE id_theme = 1");
+			SET id_theme = 0
+			WHERE id_theme = $id_theme");
 
-		// Boards?
 		upgrade_query("
 			UPDATE {$db_prefix}boards
-			SET id_theme = $id_core_theme
-			WHERE id_theme = 1");
+			SET id_theme = 0
+			WHERE id_theme = $id_theme");
 
-		// The other themes used to use core as their base theme.
-		if (isset($core['theme_dir']) && isset($core['theme_url']))
+		if ($modSettings['theme_guests'] == $id_theme)
 		{
-			$coreBasedThemes = array_diff($allThemes, array(1));
-
-			// Exclude the themes that already have a base_theme_dir.
-			$request = upgrade_query("
-				SELECT DISTINCT id_theme
-				FROM {$db_prefix}themes
-				WHERE variable = 'base_theme_dir'");
-			while ($row = $smcFunc['db_fetch_assoc']($request))
-				$coreBasedThemes = array_diff($coreBasedThemes, array($row['id_theme']));
-			$smcFunc['db_free_result']($request);
-
-			// Only base themes if there are templates that need a fall-back.
-			$insertRows = array();
-			$request = upgrade_query("
-				SELECT id_theme, value AS theme_dir
-				FROM {$db_prefix}themes
-				WHERE id_theme IN (" . implode(', ', $coreBasedThemes) . ")
-					AND id_member = 0
-					AND variable = 'theme_dir'");
-			while ($row = $smcFunc['db_fetch_assoc']($request))
-			{
-				if (!file_exists($row['theme_dir'] . '/BoardIndex.template.php') || !file_exists($row['theme_dir'] . '/Display.template.php') || !file_exists($row['theme_dir'] . '/index.template.php') || !file_exists($row['theme_dir'] . '/MessageIndex.template.php') || !file_exists($row['theme_dir'] . '/Settings.template.php'))
-				{
-					$insertRows[] = "(0, $row[id_theme], 'base_theme_dir', '" . addslashes($core['theme_dir']) . "')";
-					$insertRows[] = "(0, $row[id_theme], 'base_theme_url', '" . addslashes($core['theme_url']) . "')";
-				}
-			}
-			$smcFunc['db_free_result']($request);
-
-			if (!empty($insertRows))
-				upgrade_query("
-					INSERT IGNORE INTO {$db_prefix}themes
-						(id_member, id_theme, variable, value)
-					VALUES
-						" . implode(',
-						', $insertRows));
+			$smcFunc['db_insert']('replace',
+				'{db_prefix}settings',
+				array('variable' => 'string', 'value' => 'string'),
+				array('theme_guests', 0),
+				array('variable')
+			);
 		}
 	}
-	$smcFunc['db_free_result']($theme_request);
-
-	// This ain't running twice either - not with the risk of log_tables timing us all out!
-	$smcFunc['db_insert']('replace',
-		'{db_prefix}settings',
-		array('variable' => 'string-255', 'value' => 'string-255'),
-		array('dont_repeat_theme_core', '1'),
-		array('variable', 'value')
-	);
 }
-
 ---}
 ---#
 
@@ -1112,7 +1011,7 @@ if ((!isset($modSettings['smfVersion']) || $modSettings['smfVersion'] <= '2.0 RC
 ---# Installing new smiley sets...
 ---{
 // Don't do this twice!
-if (empty($modSettings['installed_new_smiley_sets_20']))
+if (empty($modSettings['dont_repeat_smileys_20']) && empty($modSettings['installed_new_smiley_sets_20']))
 {
 	// First, the entries.
 	upgrade_query("
@@ -1131,7 +1030,7 @@ if (empty($modSettings['installed_new_smiley_sets_20']))
 		'{db_prefix}settings',
 		array('variable' => 'string-255', 'value' => 'string-255'),
 		array('installed_new_smiley_sets_20', '1'),
-		array('variable', 'value')
+		array('variable')
 	);
 }
 ---}
@@ -1158,7 +1057,7 @@ if ($smcFunc['db_server_info'] < 8.2)
 	if ($return_type['type_udt_name'] != 'int4')
 	{
 		upgrade_query("
-			DROP FUNCTION INSTR(text, text)");
+			DROP FUNCTION IF EXISTS INSTR(text, text)");
 	}
 }
 else
@@ -1229,13 +1128,13 @@ if ($smcFunc['db_server_info'] < 8.2)
 	$query = upgrade_query("SELECT * FROM pg_proc WHERE proname = 'find_in_set' AND proargtypes = '25 25'");
 	if ($smcFunc['db_num_rows']($query) != 0)
 	{
-		upgrade_query("DROP FUNCTION FIND_IN_SET(text, text)");
+		upgrade_query("DROP FUNCTION IF EXISTS FIND_IN_SET(text, text)");
 	}
 
 	$query = upgrade_query("SELECT * FROM pg_proc WHERE proname = 'find_in_set' AND proargtypes = '23 1043'");
 	if ($smcFunc['db_num_rows']($query) != 0)
 	{
-		upgrade_query("DROP FUNCTION FIND_IN_SET(integer, character varying)");
+		upgrade_query("DROP FUNCTION IF EXISTS FIND_IN_SET(integer, character varying)");
 	}
 }
 else
@@ -1333,29 +1232,6 @@ else
 --- Adjusting group types.
 /******************************************************************************/
 
----# Fixing the group types.
----{
-// Get the admin group type.
-$request = upgrade_query("
-	SELECT group_type
-	FROM {$db_prefix}membergroups
-	WHERE id_group = 1
-	LIMIT 1");
-list ($admin_group_type) = pg_fetch_row($request);
-pg_free_result($request);
-
-// Not protected means we haven't updated yet!
-if ($admin_group_type != 1)
-{
-	// Increase by one.
-	upgrade_query("
-		UPDATE {$db_prefix}membergroups
-		SET group_type = group_type + 1
-		WHERE group_type > 0");
-}
----}
----#
-
 ---# Changing the group type for Administrator group.
 UPDATE {$db_prefix}membergroups
 SET group_type = 1
@@ -1368,12 +1244,12 @@ WHERE id_group = 1;
 
 ---# Adjusting calendar maximum year.
 ---{
-if (!isset($modSettings['cal_maxyear']) || $modSettings['cal_maxyear'] == '2010')
+if (!isset($modSettings['cal_maxyear']) || $modSettings['cal_maxyear'] < 2030)
 {
 	$smcFunc['db_insert']('replace',
 		'{db_prefix}settings',
 		array('variable' => 'string-255', 'value' => 'string-255'),
-		array('cal_maxyear', '2020'),
+		array('cal_maxyear', '2030'),
 		array('variable', 'value')
 	);
 }

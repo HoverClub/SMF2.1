@@ -6,11 +6,11 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
 if (!defined('SMF'))
@@ -19,14 +19,14 @@ if (!defined('SMF'))
 /**
  * Scheduled tasks management dispatcher. This function checks permissions and delegates
  * to the appropriate function based on the sub-action.
- * Everything here requires adin_forum permission.
+ * Everything here requires admin_forum permission.
  *
- * @uses ManageScheduledTasks template file
- * @uses ManageScheduledTasks language file
+ * Uses ManageScheduledTasks template file
+ * Uses ManageScheduledTasks language file
  */
 function ManageScheduledTasks()
 {
-	global $context, $txt, $modSettings;
+	global $context, $txt;
 
 	isAllowedTo('admin_forum');
 
@@ -37,9 +37,8 @@ function ManageScheduledTasks()
 		'taskedit' => 'EditTask',
 		'tasklog' => 'TaskLog',
 		'tasks' => 'ScheduledTasks',
+		'settings' => 'TaskSettings',
 	);
-
-	call_integration_hook('integrate_manage_scheduled_tasks', array(&$subActions));
 
 	// We need to find what's the action.
 	if (isset($_REQUEST['sa']) && isset($subActions[$_REQUEST['sa']]))
@@ -59,21 +58,26 @@ function ManageScheduledTasks()
 			'tasklog' => array(
 				'description' => $txt['scheduled_log_desc'],
 			),
+			'settings' => array(
+				'description' => $txt['scheduled_tasks_settings_desc'],
+			),
 		),
 	);
 
+	call_integration_hook('integrate_manage_scheduled_tasks', array(&$subActions));
+
 	// Call it.
-	$subActions[$context['sub_action']]();
+	call_helper($subActions[$context['sub_action']]);
 }
 
 /**
  * List all the scheduled task in place on the forum.
  *
- * @uses ManageScheduledTasks template, view_scheduled_tasks sub-template
+ * @uses template_view_scheduled_tasks()
  */
 function ScheduledTasks()
 {
-	global $context, $txt, $sourcedir, $smcFunc, $user_info, $modSettings, $scripturl;
+	global $context, $txt, $sourcedir, $smcFunc, $scripturl;
 
 	// Mama, setup the template first - cause it's like the most important bit, like pickle in a sandwich.
 	// ... ironically I don't like pickle. </grudge>
@@ -103,6 +107,22 @@ function ScheduledTasks()
 			)
 		);
 
+		// Update the "allow_expire_redirect" setting...
+		$get_info = $smcFunc['db_query']('', '
+			SELECT disabled
+			FROM {db_prefix}scheduled_tasks
+			WHERE task = {string:remove_redirect}',
+			array(
+				'remove_redirect' => 'remove_topic_redirect'
+			)
+		);
+
+		$temp = $smcFunc['db_fetch_assoc']($get_info);
+		$task_disabled = !empty($temp['disabled']) ? 0 : 1;
+		$smcFunc['db_free_result']($get_info);
+
+		updateSettings(array('allow_expire_redirect' => $task_disabled));
+
 		// Pop along...
 		CalculateNextTrigger();
 	}
@@ -110,6 +130,8 @@ function ScheduledTasks()
 	// Want to run any of the tasks?
 	if (isset($_REQUEST['run']) && isset($_POST['run_task']))
 	{
+		$task_string = '';
+
 		// Lets figure out which ones they want to run.
 		$tasks = array();
 		foreach ($_POST['run_task'] as $task => $dummy)
@@ -117,12 +139,13 @@ function ScheduledTasks()
 
 		// Load up the tasks.
 		$request = $smcFunc['db_query']('', '
-			SELECT id_task, task
+			SELECT id_task, task, callable
 			FROM {db_prefix}scheduled_tasks
 			WHERE id_task IN ({array_int:tasks})
-			LIMIT ' . count($tasks),
+			LIMIT {int:limit}',
 			array(
 				'tasks' => $tasks,
+				'limit' => count($tasks),
 			)
 		);
 
@@ -131,9 +154,21 @@ function ScheduledTasks()
 		ignore_user_abort(true);
 		while ($row = $smcFunc['db_fetch_assoc']($request))
 		{
-			$start_time = microtime();
+			// What kind of task are we handling?
+			if (!empty($row['callable']))
+				$task_string = $row['callable'];
+
+			// Default SMF task or old mods?
+			elseif (function_exists('scheduled_' . $row['task']))
+				$task_string = 'scheduled_' . $row['task'];
+
+			// One last resource, the task name.
+			elseif (!empty($row['task']))
+				$task_string = $row['task'];
+
+			$start_time = microtime(true);
 			// The functions got to exist for us to use it.
-			if (!function_exists('scheduled_' . $row['task']))
+			if (empty($task_string))
 				continue;
 
 			// Try to stop a timeout, this would be bad...
@@ -141,13 +176,20 @@ function ScheduledTasks()
 			if (function_exists('apache_reset_timeout'))
 				@apache_reset_timeout();
 
-			// Do the task...
-			$completed = call_user_func('scheduled_' . $row['task']);
+			// Get the callable.
+			$callable_task = call_helper($task_string, true);
+
+			// Perform the task.
+			if (!empty($callable_task))
+				$completed = call_user_func($callable_task);
+
+			else
+				$completed = false;
 
 			// Log that we did it ;)
 			if ($completed)
 			{
-				$total_time = round(array_sum(explode(' ', microtime())) - array_sum(explode(' ', $start_time)), 3);
+				$total_time = round(microtime(true) - $start_time, 3);
 				$smcFunc['db_insert']('',
 					'{db_prefix}log_scheduled_tasks',
 					array('id_task' => 'int', 'time_run' => 'int', 'time_taken' => 'float'),
@@ -187,7 +229,7 @@ function ScheduledTasks()
 				'data' => array(
 					'sprintf' => array(
 						'format' => '
-							<a href="' . $scripturl . '?action=admin;area=scheduledtasks;sa=taskedit;tid=%1$d">%2$s</a><br /><span class="smalltext">%3$s</span>',
+							<a href="' . $scripturl . '?action=admin;area=scheduledtasks;sa=taskedit;tid=%1$d">%2$s</a><br><span class="smalltext">%3$s</span>',
 						'params' => array(
 							'id' => false,
 							'name' => false,
@@ -214,24 +256,6 @@ function ScheduledTasks()
 					'class' => 'smalltext',
 				),
 			),
-			'enabled' => array(
-				'header' => array(
-					'value' => $txt['scheduled_tasks_enabled'],
-					'style' => 'width: 6%;',
-					'class' => 'centercol',
-				),
-				'data' => array(
-					'sprintf' => array(
-						'format' =>
-							'<input type="hidden" name="enable_task[%1$d]" id="task_%1$d" value="0" /><input type="checkbox" name="enable_task[%1$d]" id="task_check_%1$d" %2$s class="input_check" />',
-						'params' => array(
-							'id' => false,
-							'checked_state' => false,
-						),
-					),
-					'class' => 'centercol',
-				),
-			),
 			'run_now' => array(
 				'header' => array(
 					'value' => $txt['scheduled_tasks_run_now'],
@@ -241,9 +265,27 @@ function ScheduledTasks()
 				'data' => array(
 					'sprintf' => array(
 						'format' =>
-							'<input type="checkbox" name="run_task[%1$d]" id="run_task_%1$d" class="input_check" />',
+							'<input type="checkbox" name="run_task[%1$d]" id="run_task_%1$d">',
 						'params' => array(
 							'id' => false,
+						),
+					),
+					'class' => 'centercol',
+				),
+			),
+			'enabled' => array(
+				'header' => array(
+					'value' => $txt['scheduled_tasks_enabled'],
+					'style' => 'width: 6%;',
+					'class' => 'centercol',
+				),
+				'data' => array(
+					'sprintf' => array(
+						'format' =>
+							'<input type="hidden" name="enable_task[%1$d]" id="task_%1$d" value="0"><input type="checkbox" name="enable_task[%1$d]" id="task_check_%1$d" %2$s>',
+						'params' => array(
+							'id' => false,
+							'checked_state' => false,
 						),
 					),
 					'class' => 'centercol',
@@ -257,13 +299,12 @@ function ScheduledTasks()
 			array(
 				'position' => 'below_table_data',
 				'value' => '
-					<input type="submit" name="save" value="' . $txt['scheduled_tasks_save_changes'] . '" class="button_submit" />
-					<input type="submit" name="run" value="' . $txt['scheduled_tasks_run_now'] . '" class="button_submit" />',
+					<input type="submit" name="save" value="' . $txt['scheduled_tasks_save_changes'] . '" class="button">
+					<input type="submit" name="run" value="' . $txt['scheduled_tasks_run_now'] . '" class="button">',
 			),
 			array(
 				'position' => 'after_title',
 				'value' => $txt['scheduled_tasks_time_offset'],
-				'class' => 'windowbg2',
 			),
 		),
 	);
@@ -279,9 +320,10 @@ function ScheduledTasks()
 /**
  * Callback function for createList() in ScheduledTasks().
  *
- * @param int $start
- * @param int $items_per_page
- * @param string $sort
+ * @param int $start The item to start with (not used here)
+ * @param int $items_per_page The number of items to display per page (not used here)
+ * @param string $sort A string indicating how to sort things (not used here)
+ * @return array An array of information about available scheduled tasks
  */
 function list_getScheduledTasks($start, $items_per_page, $sort)
 {
@@ -304,10 +346,10 @@ function list_getScheduledTasks($start, $items_per_page, $sort)
 			'id' => $row['id_task'],
 			'function' => $row['task'],
 			'name' => isset($txt['scheduled_task_' . $row['task']]) ? $txt['scheduled_task_' . $row['task']] : $row['task'],
-			'desc' => isset($txt['scheduled_task_desc_' . $row['task']]) ? $txt['scheduled_task_desc_' . $row['task']] : '',
+			'desc' => isset($txt['scheduled_task_desc_' . $row['task']]) ? sprintf($txt['scheduled_task_desc_' . $row['task']], $scripturl) : '',
 			'next_time' => $row['disabled'] ? $txt['scheduled_tasks_na'] : timeformat(($row['next_time'] == 0 ? time() : $row['next_time']), true, 'server'),
 			'disabled' => $row['disabled'],
-			'checked_state' => $row['disabled'] ? '' : 'checked="checked"',
+			'checked_state' => $row['disabled'] ? '' : 'checked',
 			'regularity' => $offset . ', ' . $repeating,
 		);
 	}
@@ -319,11 +361,11 @@ function list_getScheduledTasks($start, $items_per_page, $sort)
 /**
  * Function for editing a task.
  *
- * @uses ManageScheduledTasks template, edit_scheduled_tasks sub-template
+ * @uses template_edit_scheduled_tasks()
  */
 function EditTask()
 {
-	global $context, $txt, $sourcedir, $smcFunc, $user_info, $modSettings;
+	global $context, $txt, $sourcedir, $smcFunc, $scripturl;
 
 	// Just set up some lovely context stuff.
 	$context[$context['admin_menu_name']]['current_subsection'] = 'tasks';
@@ -410,7 +452,7 @@ function EditTask()
 			'id' => $row['id_task'],
 			'function' => $row['task'],
 			'name' => isset($txt['scheduled_task_' . $row['task']]) ? $txt['scheduled_task_' . $row['task']] : $row['task'],
-			'desc' => isset($txt['scheduled_task_desc_' . $row['task']]) ? $txt['scheduled_task_desc_' . $row['task']] : '',
+			'desc' => isset($txt['scheduled_task_desc_' . $row['task']]) ? sprintf($txt['scheduled_task_desc_' . $row['task']], $scripturl) : '',
 			'next_time' => $row['disabled'] ? $txt['scheduled_tasks_na'] : timeformat($row['next_time'] == 0 ? time() : $row['next_time'], true, 'server'),
 			'disabled' => $row['disabled'],
 			'offset' => $row['time_offset'],
@@ -427,7 +469,7 @@ function EditTask()
 /**
  * Show the log of all tasks that have taken place.
  *
- * @uses ManageScheduledTasks language file
+ * Uses ManageScheduledTasks language file
  */
 function TaskLog()
 {
@@ -477,9 +519,10 @@ function TaskLog()
 					'value' => $txt['scheduled_log_time_run'],
 				),
 				'data' => array(
-					'function' => create_function('$rowData', '
-						return timeformat($rowData[\'time_run\'], true);
-					'),
+					'function' => function($rowData)
+					{
+						return timeformat($rowData['time_run'], true);
+					},
 				),
 				'sort' => array(
 					'default' => 'lst.id_log DESC',
@@ -512,12 +555,11 @@ function TaskLog()
 			array(
 				'position' => 'below_table_data',
 				'value' => '
-					<input type="submit" name="removeAll" value="' . $txt['scheduled_log_empty_log'] . '" onclick="return confirm(\'' . $txt['scheduled_log_empty_log_confirm'] . '\');" class="button_submit" />',
+					<input type="submit" name="removeAll" value="' . $txt['scheduled_log_empty_log'] . '" data-confirm="' . $txt['scheduled_log_empty_log_confirm'] . '" class="button you_sure">',
 			),
 			array(
 				'position' => 'after_title',
 				'value' => $txt['scheduled_tasks_time_offset'],
-				'class' => 'windowbg2',
 			),
 		),
 	);
@@ -538,9 +580,10 @@ function TaskLog()
 /**
  * Callback function for createList() in TaskLog().
  *
- * @param int $start
- * @param int $items_per_page
- * @param string $sort
+ * @param int $start The item to start with (for pagination purposes)
+ * @param int $items_per_page How many items to display per page
+ * @param string $sort A string indicating how to sort the results
+ * @return array An array of info about task log entries
  */
 function list_getTaskLogEntries($start, $items_per_page, $sort)
 {
@@ -550,9 +593,12 @@ function list_getTaskLogEntries($start, $items_per_page, $sort)
 		SELECT lst.id_log, lst.id_task, lst.time_run, lst.time_taken, st.task
 		FROM {db_prefix}log_scheduled_tasks AS lst
 			INNER JOIN {db_prefix}scheduled_tasks AS st ON (st.id_task = lst.id_task)
-		ORDER BY ' . $sort . '
-		LIMIT ' . $start . ', ' . $items_per_page,
+		ORDER BY {raw:sort}
+		LIMIT {int:start}, {int:items}',
 		array(
+			'sort' => $sort,
+			'start' => $start,
+			'items' => $items_per_page,
 		)
 	);
 	$log_entries = array();
@@ -570,6 +616,8 @@ function list_getTaskLogEntries($start, $items_per_page, $sort)
 
 /**
  * Callback function for createList() in TaskLog().
+ *
+ * @return int The number of log entries
  */
 function list_getNumTaskLogEntries()
 {
@@ -585,6 +633,56 @@ function list_getNumTaskLogEntries()
 	$smcFunc['db_free_result']($request);
 
 	return $num_entries;
+}
+
+/**
+ * This handles settings related to scheduled tasks
+ *
+ * @param bool $return_config Whether or not to return the config vars. Used in the admin search.
+ * @return void|array If return_config is true, returns the array of $config_vars
+ */
+function TaskSettings($return_config = false)
+{
+	global $sourcedir, $txt, $context, $scripturl;
+
+	// We will need the utility functions from here.
+	require_once($sourcedir . '/ManageServer.php');
+
+	loadLanguage('Help');
+
+	$config_vars = array(
+		array('check', 'cron_is_real_cron', 'subtext' => $txt['cron_is_real_cron_desc'], 'help' => 'cron_is_real_cron'),
+	);
+
+	call_integration_hook('integrate_scheduled_tasks_settings', array(&$config_vars));
+
+	if ($return_config)
+		return $config_vars;
+
+	// Set up the template.
+	$context['page_title'] = $txt['scheduled_tasks_settings'];
+	$context['sub_template'] = 'show_settings';
+
+	$context['post_url'] = $scripturl . '?action=admin;area=scheduledtasks;save;sa=settings';
+	$context['settings_title'] = $txt['scheduled_tasks_settings'];
+
+	// Saving?
+	if (isset($_GET['save']))
+	{
+		checkSession();
+
+		$save_vars = $config_vars;
+
+		call_integration_hook('integrate_save_scheduled_tasks_settings', array(&$save_vars));
+
+		saveDBSettings($save_vars);
+
+		$_SESSION['adm-save'] = true;
+
+		redirectexit('action=admin;area=scheduledtasks;sa=settings');
+	}
+
+	prepareDBSettingContext($config_vars);
 }
 
 ?>

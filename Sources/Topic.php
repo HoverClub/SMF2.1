@@ -7,11 +7,11 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
 if (!defined('SMF'))
@@ -26,7 +26,7 @@ if (!defined('SMF'))
  *  - logs the action to the moderator log.
  *  - returns to the topic after it is done.
  *  - it is accessed via ?action=lock.
-*/
+ */
 function LockTopic()
 {
 	global $topic, $user_info, $sourcedir, $board, $smcFunc;
@@ -60,6 +60,12 @@ function LockTopic()
 	else
 		isAllowedTo('lock_any');
 
+	// Another moderator got the job done first?
+	if (isset($_GET['sa']) && $_GET['sa'] == 'unlock' && $locked == '0')
+		fatal_lang_error('error_topic_locked_already', false);
+	elseif (isset($_GET['sa']) && $_GET['sa'] == 'lock' && ($locked == '1' || $locked == '2'))
+		fatal_lang_error('error_topic_unlocked_already', false);
+
 	// Locking with high privileges.
 	if ($locked == '0' && !$user_lock)
 		$locked = '1';
@@ -91,7 +97,7 @@ function LockTopic()
 	sendNotifications($topic, empty($locked) ? 'unlock' : 'lock');
 
 	// Back to the topic!
-	redirectexit('topic=' . $topic . '.' . $_REQUEST['start'] . (WIRELESS ? ';moderate' : ''));
+	redirectexit('topic=' . $topic . '.' . $_REQUEST['start'] . ';moderate');
 }
 
 /**
@@ -106,14 +112,10 @@ function LockTopic()
  */
 function Sticky()
 {
-	global $modSettings, $topic, $board, $sourcedir, $smcFunc;
+	global $topic, $board, $sourcedir, $smcFunc;
 
 	// Make sure the user can sticky it, and they are stickying *something*.
 	isAllowedTo('make_sticky');
-
-	// You shouldn't be able to (un)sticky a topic if the setting is disabled.
-	if (empty($modSettings['enableStickyTopics']))
-		fatal_lang_error('cannot_make_sticky', false);
 
 	// You can't sticky a board or something!
 	if (empty($topic))
@@ -137,6 +139,12 @@ function Sticky()
 	list ($is_sticky) = $smcFunc['db_fetch_row']($request);
 	$smcFunc['db_free_result']($request);
 
+	// Another moderator got the job done first?
+	if (isset($_GET['sa']) && $_GET['sa'] == 'nonsticky' && $is_sticky == '0')
+		fatal_lang_error('error_topic_nonsticky_already', false);
+	elseif (isset($_GET['sa']) && $_GET['sa'] == 'sticky' && $is_sticky == '1')
+		fatal_lang_error('error_topic_sticky_already', false);
+
 	// Toggle the sticky value.... pretty simple ;).
 	$smcFunc['db_query']('', '
 		UPDATE {db_prefix}topics
@@ -155,7 +163,7 @@ function Sticky()
 		sendNotifications($topic, 'sticky');
 
 	// Take them back to the now stickied topic.
-	redirectexit('topic=' . $topic . '.' . $_REQUEST['start'] . (WIRELESS ? ';moderate' : ''));
+	redirectexit('topic=' . $topic . '.' . $_REQUEST['start'] . ';moderate');
 }
 
 ?>

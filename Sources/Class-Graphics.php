@@ -12,16 +12,21 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
 if (!defined('SMF'))
 	die('No direct access...');
 
+/**
+ * Class gif_lzw_compression
+ *
+ * An implementation of the LZW compression algorithm
+ */
 class gif_lzw_compression
 {
 	public $MAX_LZW_BITS;
@@ -33,17 +38,17 @@ class gif_lzw_compression
 		$this->MAX_LZW_BITS = 12;
 		unset($this->Next, $this->Vals, $this->Stack, $this->Buf);
 
-		$this->Next  = range(0, (1 << $this->MAX_LZW_BITS)       - 1);
-		$this->Vals  = range(0, (1 << $this->MAX_LZW_BITS)       - 1);
+		$this->Next = range(0, (1 << $this->MAX_LZW_BITS) - 1);
+		$this->Vals = range(0, (1 << $this->MAX_LZW_BITS) - 1);
 		$this->Stack = range(0, (1 << ($this->MAX_LZW_BITS + 1)) - 1);
-		$this->Buf   = range(0, 279);
+		$this->Buf = range(0, 279);
 	}
 
 	public function decompress($data, &$datLen)
 	{
-		$stLen  = strlen($data);
+		$stLen = strlen($data);
 		$datLen = 0;
-		$ret    = '';
+		$ret = '';
 
 		$this->LZWCommand($data, true);
 
@@ -65,10 +70,10 @@ class gif_lzw_compression
 			$this->SetCodeSize = ord($data[0]);
 			$data = substr($data, 1);
 
-			$this->CodeSize    = $this->SetCodeSize + 1;
-			$this->ClearCode   = 1 << $this->SetCodeSize;
-			$this->EndCode     = $this->ClearCode + 1;
-			$this->MaxCode     = $this->ClearCode + 2;
+			$this->CodeSize = $this->SetCodeSize + 1;
+			$this->ClearCode = 1 << $this->SetCodeSize;
+			$this->EndCode = $this->ClearCode + 1;
+			$this->MaxCode = $this->ClearCode + 2;
 			$this->MaxCodeSize = $this->ClearCode << 1;
 
 			$this->GetCode($data, $bInit);
@@ -96,7 +101,7 @@ class gif_lzw_compression
 			do
 			{
 				$this->FirstCode = $this->GetCode($data, $bInit);
-				$this->OldCode   = $this->FirstCode;
+				$this->OldCode = $this->FirstCode;
 			}
 			while ($this->FirstCode == $this->ClearCode);
 
@@ -125,12 +130,12 @@ class gif_lzw_compression
 					$this->Vals[$i] = 0;
 				}
 
-				$this->CodeSize    = $this->SetCodeSize + 1;
+				$this->CodeSize = $this->SetCodeSize + 1;
 				$this->MaxCodeSize = $this->ClearCode << 1;
-				$this->MaxCode     = $this->ClearCode + 2;
-				$this->sp          = 0;
-				$this->FirstCode   = $this->GetCode($data, $bInit);
-				$this->OldCode     = $this->FirstCode;
+				$this->MaxCode = $this->ClearCode + 2;
+				$this->sp = 0;
+				$this->FirstCode = $this->GetCode($data, $bInit);
+				$this->OldCode = $this->FirstCode;
 
 				return $this->FirstCode;
 			}
@@ -189,9 +194,9 @@ class gif_lzw_compression
 	{
 		if ($bInit)
 		{
-			$this->CurBit   = 0;
-			$this->LastBit  = 0;
-			$this->Done     = 0;
+			$this->CurBit = 0;
+			$this->LastBit = 0;
+			$this->Done = 0;
 			$this->LastByte = 2;
 
 			return 1;
@@ -212,12 +217,12 @@ class gif_lzw_compression
 			$this->Buf[1] = $this->Buf[$this->LastByte - 1];
 
 			$count = ord($data[0]);
-			$data  = substr($data, 1);
+			$data = substr($data, 1);
 
 			if ($count)
 			{
 				for ($i = 0; $i < $count; $i++)
-					$this->Buf[2 + $i] = ord($data{$i});
+					$this->Buf[2 + $i] = ord($data[$i]);
 
 				$data = substr($data, $count);
 			}
@@ -226,7 +231,7 @@ class gif_lzw_compression
 
 			$this->LastByte = 2 + $count;
 			$this->CurBit = ($this->CurBit - $this->LastBit) + 16;
-			$this->LastBit  = (2 + $count) << 3;
+			$this->LastBit = (2 + $count) << 3;
 		}
 
 		$iRet = 0;
@@ -250,7 +255,7 @@ class gif_color_table
 
 	public function load($lpData, $num)
 	{
-		$this->m_nColors  = 0;
+		$this->m_nColors = 0;
 		$this->m_arColors = array();
 
 		for ($i = 0; $i < $num; $i++)
@@ -273,8 +278,8 @@ class gif_color_table
 		for ($i = 0; $i < $this->m_nColors; $i++)
 		{
 			$ret .=
-				chr(($this->m_arColors[$i] & 0x000000FF))       . // R
-				chr(($this->m_arColors[$i] & 0x0000FF00) >>  8) . // G
+				chr(($this->m_arColors[$i] & 0x000000FF)) . // R
+				chr(($this->m_arColors[$i] & 0x0000FF00) >> 8) . // G
 				chr(($this->m_arColors[$i] & 0x00FF0000) >> 16);  // B
 		}
 
@@ -283,18 +288,19 @@ class gif_color_table
 
 	public function colorIndex($rgb)
 	{
-		$rgb  = intval($rgb) & 0xFFFFFF;
-		$r1   = ($rgb & 0x0000FF);
-		$g1   = ($rgb & 0x00FF00) >>  8;
-		$b1   = ($rgb & 0xFF0000) >> 16;
-		$idx  = -1;
+		$dif = 0;
+		$rgb = intval($rgb) & 0xFFFFFF;
+		$r1 = ($rgb & 0x0000FF);
+		$g1 = ($rgb & 0x00FF00) >> 8;
+		$b1 = ($rgb & 0xFF0000) >> 16;
+		$idx = -1;
 
 		for ($i = 0; $i < $this->m_nColors; $i++)
 		{
 			$r2 = ($this->m_arColors[$i] & 0x000000FF);
-			$g2 = ($this->m_arColors[$i] & 0x0000FF00) >>  8;
+			$g2 = ($this->m_arColors[$i] & 0x0000FF00) >> 8;
 			$b2 = ($this->m_arColors[$i] & 0x00FF0000) >> 16;
-			$d  = abs($r2 - $r1) + abs($g2 - $g1) + abs($b2 - $b1);
+			$d = abs($r2 - $r1) + abs($g2 - $g1) + abs($b2 - $b1);
 
 			if (($idx == -1) || ($d < $dif))
 			{
@@ -333,11 +339,11 @@ class gif_file_header
 			return false;
 
 		$b = ord(substr($lpData, 10, 1));
-		$this->m_bGlobalClr  = ($b & 0x80) ? true : false;
-		$this->m_nColorRes   = ($b & 0x70) >> 4;
-		$this->m_bSorted     = ($b & 0x08) ? true : false;
-		$this->m_nTableSize  = 2 << ($b & 0x07);
-		$this->m_nBgColor    = ord(substr($lpData, 11, 1));
+		$this->m_bGlobalClr = ($b & 0x80) ? true : false;
+		$this->m_nColorRes = ($b & 0x70) >> 4;
+		$this->m_bSorted = ($b & 0x08) ? true : false;
+		$this->m_nTableSize = 2 << ($b & 0x07);
+		$this->m_nBgColor = ord(substr($lpData, 11, 1));
 		$this->m_nPixelRatio = ord(substr($lpData, 12, 1));
 		$hdrLen = 13;
 
@@ -376,9 +382,9 @@ class gif_image_header
 			return false;
 
 		$b = ord($lpData[8]);
-		$this->m_bLocalClr  = ($b & 0x80) ? true : false;
+		$this->m_bLocalClr = ($b & 0x80) ? true : false;
 		$this->m_bInterlace = ($b & 0x40) ? true : false;
-		$this->m_bSorted    = ($b & 0x20) ? true : false;
+		$this->m_bSorted = ($b & 0x20) ? true : false;
 		$this->m_nTableSize = 2 << ($b & 0x07);
 		$hdrLen = 9;
 
@@ -419,41 +425,40 @@ class gif_image
 
 			switch ($b)
 			{
-			// Extension...
-			case 0x21:
-				$len = 0;
-				if (!$this->skipExt($data, $len))
+				// Extension...
+				case 0x21:
+					$len = 0;
+					if (!$this->skipExt($data, $len))
+						return false;
+
+					$datLen += $len;
+					break;
+
+				// Image...
+				case 0x2C:
+					// Load the header and color table.
+					$len = 0;
+					if (!$this->m_gih->load($data, $len))
+						return false;
+
+					$data = substr($data, $len);
+					$datLen += $len;
+
+					// Decompress the data, and ride on home ;).
+					$len = 0;
+					if (!($this->m_data = $this->m_lzw->decompress($data, $len)))
+						return false;
+
+					$datLen += $len;
+
+					if ($this->m_gih->m_bInterlace)
+						$this->deInterlace();
+
+					return true;
+
+				case 0x3B: // EOF
+				default:
 					return false;
-
-				$datLen += $len;
-				break;
-
-			// Image...
-			case 0x2C:
-				// Load the header and color table.
-				$len = 0;
-				if (!$this->m_gih->load($data, $len))
-					return false;
-
-				$data = substr($data, $len);
-				$datLen += $len;
-
-				// Decompress the data, and ride on home ;).
-				$len = 0;
-				if (!($this->m_data = $this->m_lzw->decompress($data, $len)))
-					return false;
-
-				$data = substr($data, $len);
-				$datLen += $len;
-
-				if ($this->m_gih->m_bInterlace)
-					$this->deInterlace();
-
-				return true;
-
-			case 0x3B: // EOF
-			default:
-				return false;
 			}
 		}
 		return false;
@@ -469,28 +474,28 @@ class gif_image
 
 		switch ($b)
 		{
-		// Graphic Control...
-		case 0xF9:
-			$b = ord($data[1]);
-			$this->m_disp   = ($b & 0x1C) >> 2;
-			$this->m_bUser  = ($b & 0x02) ? true : false;
-			$this->m_bTrans = ($b & 0x01) ? true : false;
-			list ($this->m_nDelay) = array_values(unpack('v', substr($data, 2, 2)));
-			$this->m_nTrans = ord($data[4]);
-			break;
+			// Graphic Control...
+			case 0xF9:
+				$b = ord($data[1]);
+				$this->m_disp = ($b & 0x1C) >> 2;
+				$this->m_bUser = ($b & 0x02) ? true : false;
+				$this->m_bTrans = ($b & 0x01) ? true : false;
+				list ($this->m_nDelay) = array_values(unpack('v', substr($data, 2, 2)));
+				$this->m_nTrans = ord($data[4]);
+				break;
 
-		// Comment...
-		case 0xFE:
-			$this->m_lpComm = substr($data, 1, ord($data[0]));
-			break;
+			// Comment...
+			case 0xFE:
+				$this->m_lpComm = substr($data, 1, ord($data[0]));
+				break;
 
-		// Plain text...
-		case 0x01:
-			break;
+			// Plain text...
+			case 0x01:
+				break;
 
-		// Application...
-		case 0xFF:
-			break;
+			// Application...
+			case 0xFF:
+				break;
 		}
 
 		// Skip default as defs may change.
@@ -501,7 +506,7 @@ class gif_image
 		{
 			$data = substr($data, $b);
 			$extLen += $b;
-			$b    = ord($data[0]);
+			$b = ord($data[0]);
 			$data = substr($data, 1);
 			$extLen++;
 		}
@@ -516,25 +521,25 @@ class gif_image
 		{
 			switch ($i)
 			{
-			case 0:
-				$s = 8;
-				$y = 0;
-				break;
+				case 0:
+					$s = 8;
+					$y = 0;
+					break;
 
-			case 1:
-				$s = 8;
-				$y = 4;
-				break;
+				case 1:
+					$s = 8;
+					$y = 4;
+					break;
 
-			case 2:
-				$s = 4;
-				$y = 2;
-				break;
+				case 2:
+					$s = 4;
+					$y = 2;
+					break;
 
-			case 3:
-				$s = 2;
-				$y = 1;
-				break;
+				case 3:
+					$s = 2;
+					$y = 1;
+					break;
 			}
 
 			for (; $y < $this->m_gih->m_nHeight; $y += $s)
@@ -641,7 +646,7 @@ class gif_file
 			{
 				// Is this in the proper range?  If so, get the specific pixel data...
 				if ($x >= $header->m_nLeft && $y >= $header->m_nTop && $x < ($header->m_nLeft + $header->m_nWidth) && $y < ($header->m_nTop + $header->m_nHeight))
-					$bmp .= $data{$i};
+					$bmp .= $data[$i];
 				// Otherwise, this is background...
 				else
 					$bmp .= chr($background_color);

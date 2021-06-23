@@ -7,11 +7,11 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
 if (!defined('SMF'))
@@ -25,11 +25,11 @@ if (!defined('SMF'))
  * Upon successful completion of action will direct user back to topic.
  * Accessed via ?action=vote.
  *
- * @uses Post language file.
+ * Uses Post language file.
  */
 function Vote()
 {
-	global $topic, $txt, $user_info, $smcFunc, $sourcedir, $modSettings;
+	global $topic, $user_info, $smcFunc, $sourcedir, $modSettings;
 
 	// Make sure you can vote.
 	isAllowedTo('poll_vote');
@@ -38,7 +38,7 @@ function Vote()
 
 	// Check if they have already voted, or voting is locked.
 	$request = $smcFunc['db_query']('', '
-		SELECT IFNULL(lp.id_choice, -1) AS selected, p.voting_locked, p.id_poll, p.expire_time, p.max_votes, p.change_vote,
+		SELECT COALESCE(lp.id_choice, -1) AS selected, p.voting_locked, p.id_poll, p.expire_time, p.max_votes, p.change_vote,
 			p.guest_vote, p.reset_poll, p.num_guest_voters
 		FROM {db_prefix}topics AS t
 			INNER JOIN {db_prefix}polls AS p ON (p.id_poll = t.id_poll)
@@ -53,6 +53,7 @@ function Vote()
 	);
 	if ($smcFunc['db_num_rows']($request) == 0)
 		fatal_lang_error('poll_error', false);
+
 	$row = $smcFunc['db_fetch_assoc']($request);
 	$smcFunc['db_free_result']($request);
 
@@ -197,7 +198,7 @@ function Vote()
 		// Time is stored in case the poll is reset later, plus what they voted for.
 		$_COOKIE['guest_poll_vote'] = empty($_COOKIE['guest_poll_vote']) ? '' : $_COOKIE['guest_poll_vote'];
 		// ;id,timestamp,[vote,vote...]; etc
-		$_COOKIE['guest_poll_vote'] .= ';' . $row['id_poll'] . ',' . time() . ',' . (count($pollOptions) > 1 ? explode(',' . $pollOptions) : $pollOptions[0]);
+		$_COOKIE['guest_poll_vote'] .= ';' . $row['id_poll'] . ',' . time() . ',' . implode(',', $pollOptions);
 
 		// Increase num guest voters count by 1
 		$smcFunc['db_query']('', '
@@ -280,6 +281,8 @@ function LockVoting()
 		)
 	);
 
+	logAction(($voting_locked ? '' : 'un') . 'lock_poll', array('topic' => $topic));
+
 	redirectexit('topic=' . $topic . '.' . $_REQUEST['start']);
 }
 
@@ -293,8 +296,8 @@ function LockVoting()
  * permission for editing, or be topic starter with poll_add_any permission for adding.
  * Accessed via ?action=editpoll.
  *
- * @uses Post language file.
- * @uses Poll template, main sub-template.
+ * Uses Post language file.
+ * Uses Poll template, main sub-template.
  */
 function EditPoll()
 {
@@ -327,6 +330,7 @@ function EditPoll()
 	// Assume the the topic exists, right?
 	if ($smcFunc['db_num_rows']($request) == 0)
 		fatal_lang_error('no_board');
+
 	// Get the poll information.
 	$pollinfo = $smcFunc['db_fetch_assoc']($request);
 	$smcFunc['db_free_result']($request);
@@ -591,7 +595,7 @@ function EditPoll()
 function EditPoll2()
 {
 	global $txt, $topic, $board, $context;
-	global $modSettings, $user_info, $smcFunc, $sourcedir;
+	global $user_info, $smcFunc, $sourcedir;
 
 	// Sneaking off, are we?
 	if (empty($_POST))
@@ -741,7 +745,7 @@ function EditPoll2()
 	else
 	{
 		// Create the poll.
-		$smcFunc['db_insert']('',
+		$bcinfo['id_poll'] = $smcFunc['db_insert']('',
 			'{db_prefix}polls',
 			array(
 				'question' => 'string-255', 'hide_results' => 'int', 'max_votes' => 'int', 'expire_time' => 'int', 'id_member' => 'int',
@@ -751,11 +755,9 @@ function EditPoll2()
 				$_POST['question'], $_POST['poll_hide'], $_POST['poll_max_votes'], $_POST['poll_expire'], $user_info['id'],
 				$user_info['username'], $_POST['poll_change_vote'], $_POST['poll_guest_vote'],
 			),
-			array('id_poll')
+			array('id_poll'),
+			1
 		);
-
-		// Set the poll ID.
-		$bcinfo['id_poll'] = $smcFunc['db_insert_id']('{db_prefix}polls', 'id_poll');
 
 		// Link the poll to the topic
 		$smcFunc['db_query']('', '
@@ -885,6 +887,25 @@ function EditPoll2()
 
 	call_integration_hook('integrate_poll_add_edit', array($bcinfo['id_poll'], $isEdit));
 
+	/* Log this edit, but don't go crazy.
+		Only specifically adding a poll	or resetting votes is logged.
+		Everything else is simply an edit.*/
+	if (isset($_REQUEST['add']))
+	{
+		// Added a poll
+		logAction('add_poll', array('topic' => $topic));
+	}
+	elseif (isset($_REQUEST['deletevotes']))
+	{
+		// Reset votes
+		logAction('reset_poll', array('topic' => $topic));
+	}
+	else
+	{
+		// Something else
+		logAction('edit_poll', array('topic' => $topic));
+	}
+
 	// Off we go.
 	redirectexit('topic=' . $topic . '.' . $_REQUEST['start']);
 }
@@ -979,6 +1000,9 @@ function RemovePoll()
 
 	// A mod might have logged this (social network?), so let them remove, it too
 	call_integration_hook('integrate_poll_remove', array($pollID));
+
+	// Log this!
+	logAction('remove_poll', array('topic' => $topic));
 
 	// Take the moderator back to the topic.
 	redirectexit('topic=' . $topic . '.' . $_REQUEST['start']);

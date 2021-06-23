@@ -6,36 +6,36 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
 if (!defined('SMF'))
 	die('No direct access...');
 
 /**
- * Class representing an xml array.  Reads in xml, allows you to access it simply.  Version 1.1.
+ * Class xmlArray
+ * Represents an XML array
  */
 class xmlArray
 {
 	/**
-	 * holds xml parsed results
-	 * @var array
+	 * @var array Holds parsed XML results
 	 */
 	public $array;
 
 	/**
-	 * holds debugging level
-	 * @var type
+	 * @var int The debugging level
 	 */
 	public $debug_level;
 
 	/**
 	 * holds trim level textual data
-	 * @var bool
+	 *
+	 * @var bool Holds trim level textual data
 	 */
 	public $trim;
 
@@ -44,9 +44,9 @@ class xmlArray
 	 * Example use:
 	 *  $xml = new xmlArray(file('data.xml'));
 	 *
-	 * @param string $data the xml data or an array of, unless is_clone is true.
-	 * @param bool $auto_trim default false, used to automatically trim textual data.
-	 * @param int $level default null, the debug level, specifies whether notices should be generated for missing elements and attributes.
+	 * @param string $data The xml data or an array of, unless is_clone is true.
+	 * @param bool $auto_trim Used to automatically trim textual data.
+	 * @param int $level The debug level. Specifies whether notices should be generated for missing elements and attributes.
 	 * @param bool $is_clone default false. If is_clone is true, the  xmlArray is cloned from another - used internally only.
 	 */
 	public function __construct($data, $auto_trim = false, $level = null, $is_clone = false)
@@ -80,6 +80,8 @@ class xmlArray
 	 * Get the root element's name.
 	 * Example use:
 	 *  echo $element->name();
+	 *
+	 * @return string The root element's name
 	 */
 	public function name()
 	{
@@ -92,8 +94,10 @@ class xmlArray
 	 * unless get_elements is true.
 	 * Example use:
 	 *  $data = $xml->fetch('html/head/title');
-	 * @param string $path - the path to the element to fetch
-	 * @param bool $get_elements - whether to include elements
+	 *
+	 * @param string $path The path to the element to fetch
+	 * @param bool $get_elements Whether to include elements
+	 * @return string The value or attribute of the specified element
 	 */
 	public function fetch($path, $get_elements = false)
 	{
@@ -130,12 +134,15 @@ class xmlArray
 	 * or return_set is true.
 	 * Example use:
 	 *  $element = $xml->path('html/body');
-	 * @param $path string - the path to the element to get
-	 * @param $return_full bool - always return full result set
+	 *
+	 * @param $path string The path to the element to get
+	 * @param $return_full bool Whether to return the full result set
 	 * @return xmlArray, a new xmlArray.
 	 */
 	public function path($path, $return_full = false)
 	{
+		global $txt;
+
 		// Split up the path.
 		$path = explode('/', $path);
 
@@ -163,11 +170,14 @@ class xmlArray
 					$i = 0;
 					while ($i < count($trace) && isset($trace[$i]['class']) && $trace[$i]['class'] == get_class($this))
 						$i++;
-					$debug = ' from ' . $trace[$i - 1]['file'] . ' on line ' . $trace[$i - 1]['line'];
+					$debug = ' (from ' . $trace[$i - 1]['file'] . ' on line ' . $trace[$i - 1]['line'] . ')';
 
 					// Cause an error.
 					if ($this->debug_level & E_NOTICE)
-						trigger_error('Undefined XML attribute: ' . substr($el, 1) . $debug, E_USER_NOTICE);
+					{
+						loadLanguage('Errors');
+						trigger_error(sprintf($txt['undefined_xml_attribute'], substr($el, 1) . $debug), E_USER_NOTICE);
+					}
 					return false;
 				}
 			}
@@ -194,8 +204,8 @@ class xmlArray
 	 * Example use,
 	 *  echo $xml->exists('html/body') ? 'y' : 'n';
 	 *
-	 * @param string $path - the path to the element to get.
-	 * @return boolean
+	 * @param string $path The path to the element to get.
+	 * @return boolean Whether the specified path exists
 	 */
 	public function exists($path)
 	{
@@ -228,11 +238,12 @@ class xmlArray
 	}
 
 	/**
-	 * Count the number of occurences of a path.
+	 * Count the number of occurrences of a path.
 	 * Example use:
 	 *  echo $xml->count('html/head/meta');
-	 * @param string $path - the path to search for.
-	 * @return int, the number of elements the path matches.
+	 *
+	 * @param string $path The path to search for.
+	 * @return int The number of elements the path matches.
 	 */
 	public function count($path)
 	{
@@ -256,8 +267,9 @@ class xmlArray
 	 * of elements, an array of xmlArray's is returned for use with foreach.
 	 * Example use:
 	 *  foreach ($xml->set('html/body/p') as $p)
-	 * @param $path string - the path to search for.
-	 * @return array, an array of xmlArray objects
+	 *
+	 * @param $path string The path to search for.
+	 * @return xmlArray[] An array of xmlArray objects
 	 */
 	public function set($path)
 	{
@@ -285,8 +297,9 @@ class xmlArray
 	 * Create an xml file from an xmlArray, the specified path if any.
 	 * Example use:
 	 *  echo $this->create_xml();
-	 * @param string $path - the path to the element. (optional)
-	 * @return string, xml-formatted string.
+	 *
+	 * @param string $path The path to the element. (optional)
+	 * @return string Xml-formatted string.
 	 */
 	public function create_xml($path = null)
 	{
@@ -314,7 +327,8 @@ class xmlArray
 	 * Example use:
 	 *  print_r($xml->to_array());
 	 *
-	 * @param string $path the path to output.
+	 * @param string $path The path to output.
+	 * @return array An array of XML data
 	 */
 	public function to_array($path = null)
 	{
@@ -339,7 +353,8 @@ class xmlArray
 	/**
 	 * Parse data into an array. (privately used...)
 	 *
-	 * @param string $data to parse
+	 * @param string $data The data to parse
+	 * @return array The parsed array
 	 */
 	protected function _parse($data)
 	{
@@ -421,7 +436,7 @@ class xmlArray
 			if ((!isset($match[3]) || trim($match[3]) != '/') && (!isset($match[2]) || trim($match[2]) != '/'))
 			{
 				// Because PHP 5.2.0+ seems to croak using regex, we'll have to do this the less fun way.
-				$last_tag_end = strpos($data, '</' . $match[1]. '>');
+				$last_tag_end = strpos($data, '</' . $match[1] . '>');
 				if ($last_tag_end === false)
 					continue;
 
@@ -435,7 +450,7 @@ class xmlArray
 						break;
 
 					// If not then find the next ending tag.
-					$next_tag_end = strpos($data, '</' . $match[1]. '>', $offset);
+					$next_tag_end = strpos($data, '</' . $match[1] . '>', $offset);
 
 					// Didn't find one? Then just use the last and sod it.
 					if ($next_tag_end === false)
@@ -449,7 +464,7 @@ class xmlArray
 				// Parse the insides.
 				$inner_match = substr($data, 0, $last_tag_end);
 				// Data now starts from where this section ends.
-				$data = substr($data, $last_tag_end + strlen('</' . $match[1]. '>'));
+				$data = substr($data, $last_tag_end + strlen('</' . $match[1] . '>'));
 
 				if (!empty($inner_match))
 				{
@@ -487,8 +502,9 @@ class xmlArray
 	/**
 	 * Get a specific element's xml. (privately used...)
 	 *
-	 * @param $array
-	 * @param $indent
+	 * @param array $array An array of element data
+	 * @param null|int $indent How many levels to indent the elements (null = no indent)
+	 * @return string The formatted XML
 	 */
 	protected function _xml($array, $indent)
 	{
@@ -516,7 +532,7 @@ class xmlArray
 		$inside_elements = false;
 		$output_el = '';
 
-		// Run through and recurively output all the elements or attrbutes inside this.
+		// Run through and recursively output all the elements or attrbutes inside this.
 		foreach ($array as $k => $v)
 		{
 			if (substr($k, 0, 1) == '@')
@@ -540,8 +556,8 @@ class xmlArray
 	/**
 	 * Return an element as an array
 	 *
-	 * @param type $array
-	 * @return type
+	 * @param array $array An array of data
+	 * @return string|array A string with the element's value or an array of element data
 	 */
 	protected function _array($array)
 	{
@@ -567,7 +583,8 @@ class xmlArray
 	/**
 	 * Parse out CDATA tags. (htmlspecialchars them...)
 	 *
-	 * @param $data
+	 * @param string $data The data with CDATA tags included
+	 * @return string The data contained within CDATA tags
 	 */
 	function _to_cdata($data)
 	{
@@ -604,7 +621,8 @@ class xmlArray
 	/**
 	 * Turn the CDATAs back to normal text.
 	 *
-	 * @param $data
+	 * @param string $data The data with CDATA tags
+	 * @return string The transformed data
 	 */
 	protected function _from_cdata($data)
 	{
@@ -612,7 +630,10 @@ class xmlArray
 		$trans_tbl = array_flip(get_html_translation_table(HTML_ENTITIES, ENT_QUOTES));
 
 		// Translate all the entities out.
-		$data = strtr(preg_replace_callback('~&#(\d{1,4});~', create_function('$m', 'return chr("$m[1]");'), $data), $trans_tbl);
+		$data = strtr(preg_replace_callback('~&#(\d{1,4});~', function($m)
+		{
+			return chr("$m[1]");
+		}, $data), $trans_tbl);
 
 		return $this->trim ? trim($data) : $data;
 	}
@@ -620,7 +641,8 @@ class xmlArray
 	/**
 	 * Given an array, return the text from that array. (recursive and privately used.)
 	 *
-	 * @param array $array
+	 * @param array $array An aray of data
+	 * @return string The text from the array
 	 */
 	protected function _fetch($array)
 	{
@@ -650,13 +672,16 @@ class xmlArray
 	/**
 	 * Get a specific array by path, one level down. (privately used...)
 	 *
-	 * @param array $array
-	 * @param string $path
-	 * @param int $level
-	 * @param bool $no_error
+	 * @param array $array An array of data
+	 * @param string $path The path
+	 * @param int $level How far deep into the array we should go
+	 * @param bool $no_error Whether or not to ignore errors
+	 * @return string|array The specified array (or the contents of said array if there's only one result)
 	 */
 	protected function _path($array, $path, $level, $no_error = false)
 	{
+		global $txt;
+
 		// Is $array even an array?  It might be false!
 		if (!is_array($array))
 			return false;
@@ -698,7 +723,10 @@ class xmlArray
 
 			// Cause an error.
 			if ($this->debug_level & E_NOTICE && !$no_error)
-				trigger_error('Undefined XML element: ' . $path . $debug, E_USER_NOTICE);
+			{
+				loadLanguage('Errors');
+				trigger_error(sprintf($txt['undefined_xml_element'], $path . $debug), E_USER_NOTICE);
+			}
 			return false;
 		}
 		// Only one result.
@@ -711,43 +739,40 @@ class xmlArray
 }
 
 /**
+ * Class ftp_connection
  * Simple FTP protocol implementation.
  *
- * http://www.faqs.org/rfcs/rfc959.html
+ * @see https://tools.ietf.org/html/rfc959
  */
 class ftp_connection
 {
 	/**
-	 * holds the connection response
-	 * @var type
+	 * @var string Holds the connection response
 	 */
 	public $connection;
 
 	/**
-	 * holds any errors
-	 * @var type
+	 * @var string Holds any errors
 	 */
 	public $error;
 
 	/**
-	 * holds last message from the server
-	 * @var type
+	 * @var string Holds the last message from the server
 	 */
 	public $last_message;
 
 	/**
-	 * Passive connection
-	 * @var type
+	 * @var boolean Whether or not this is a passive connection
 	 */
 	public $pasv;
 
 	/**
 	 * Create a new FTP connection...
 	 *
-	 * @param type $ftp_server
-	 * @param type $ftp_port
-	 * @param type $ftp_user
-	 * @param type $ftp_pass
+	 * @param string $ftp_server The server to connect to
+	 * @param int $ftp_port The port to connect to
+	 * @param string $ftp_user The username
+	 * @param string $ftp_pass The password
 	 */
 	public function __construct($ftp_server, $ftp_port = 21, $ftp_user = 'anonymous', $ftp_pass = 'ftpclient@simplemachines.org')
 	{
@@ -763,11 +788,10 @@ class ftp_connection
 	/**
 	 * Connects to a server
 	 *
-	 * @param type $ftp_server
-	 * @param type $ftp_port
-	 * @param type $ftp_user
-	 * @param type $ftp_pass
-	 * @return type
+	 * @param string $ftp_server The address of the server
+	 * @param int $ftp_port The port
+	 * @param string $ftp_user The username
+	 * @param string $ftp_pass The password
 	 */
 	public function connect($ftp_server, $ftp_port = 21, $ftp_user = 'anonymous', $ftp_pass = 'ftpclient@simplemachines.org')
 	{
@@ -777,6 +801,8 @@ class ftp_connection
 			$ftp_server = 'ssl://' . substr($ftp_server, 7);
 		if (strpos($ftp_server, 'http://') === 0)
 			$ftp_server = substr($ftp_server, 7);
+		elseif (strpos($ftp_server, 'https://') === 0)
+			$ftp_server = substr($ftp_server, 8);
 		$ftp_server = strtr($ftp_server, array('/' => '', ':' => '', '@' => ''));
 
 		// Connect to the FTP server.
@@ -784,6 +810,7 @@ class ftp_connection
 		if (!$this->connection)
 		{
 			$this->error = 'bad_server';
+			$this->last_message = 'Invalid Server';
 			return;
 		}
 
@@ -791,22 +818,27 @@ class ftp_connection
 		if (!$this->check_response(220))
 		{
 			$this->error = 'bad_response';
+			$this->last_message = 'Bad Response';
 			return;
 		}
 
 		// Send the username, it should ask for a password.
 		fwrite($this->connection, 'USER ' . $ftp_user . "\r\n");
+
 		if (!$this->check_response(331))
 		{
 			$this->error = 'bad_username';
+			$this->last_message = 'Invalid Username';
 			return;
 		}
 
 		// Now send the password... and hope it goes okay.
+
 		fwrite($this->connection, 'PASS ' . $ftp_pass . "\r\n");
 		if (!$this->check_response(230))
 		{
 			$this->error = 'bad_password';
+			$this->last_message = 'Invalid Password';
 			return;
 		}
 	}
@@ -814,8 +846,8 @@ class ftp_connection
 	/**
 	 * Changes to a directory (chdir) via the ftp connection
 	 *
-	 * @param type $ftp_path
-	 * @return boolean
+	 * @param string $ftp_path The path to the directory we want to change to
+	 * @return boolean Whether or not the operation was successful
 	 */
 	public function chdir($ftp_path)
 	{
@@ -839,9 +871,9 @@ class ftp_connection
 	/**
 	 * Changes a files atrributes (chmod)
 	 *
-	 * @param string $ftp_file
-	 * @param type $chmod
-	 * @return boolean
+	 * @param string $ftp_file The file to CHMOD
+	 * @param int|string $chmod The value for the CHMOD operation
+	 * @return boolean Whether or not the operation was successful
 	 */
 	public function chmod($ftp_file, $chmod)
 	{
@@ -851,22 +883,41 @@ class ftp_connection
 		if ($ftp_file == '')
 			$ftp_file = '.';
 
-		// Convert the chmod value from octal (0777) to text ("777").
-		fwrite($this->connection, 'SITE CHMOD ' . decoct($chmod) . ' ' . $ftp_file . "\r\n");
-		if (!$this->check_response(200))
-		{
-			$this->error = 'bad_file';
-			return false;
-		}
+		// Do we have a file or a dir?
+		$is_dir = is_dir($ftp_file);
+		$is_writable = false;
 
-		return true;
+		// Set different modes.
+		$chmod_values = $is_dir ? array(0750, 0755, 0775, 0777) : array(0644, 0664, 0666);
+
+		foreach ($chmod_values as $val)
+		{
+			// If it's writable, break out of the loop.
+			if (is_writable($ftp_file))
+			{
+				$is_writable = true;
+				break;
+			}
+
+			else
+			{
+				// Convert the chmod value from octal (0777) to text ("777").
+				fwrite($this->connection, 'SITE CHMOD ' . decoct($val) . ' ' . $ftp_file . "\r\n");
+				if (!$this->check_response(200))
+				{
+					$this->error = 'bad_file';
+					break;
+				}
+			}
+		}
+		return $is_writable;
 	}
 
 	/**
 	 * Deletes a file
 	 *
-	 * @param type $ftp_file
-	 * @return boolean
+	 * @param string $ftp_file The file to delete
+	 * @return boolean Whether or not the operation was successful
 	 */
 	public function unlink($ftp_file)
 	{
@@ -894,8 +945,8 @@ class ftp_connection
 	/**
 	 * Reads the response to the command from the server
 	 *
-	 * @param type $desired
-	 * @return type
+	 * @param string $desired The desired response
+	 * @return boolean Whether or not we got the desired response
 	 */
 	public function check_response($desired)
 	{
@@ -912,7 +963,7 @@ class ftp_connection
 	/**
 	 * Used to create a passive connection
 	 *
-	 * @return boolean
+	 * @return boolean Whether the passive connection was created successfully
 	 */
 	public function passive()
 	{
@@ -950,8 +1001,8 @@ class ftp_connection
 	/**
 	 * Creates a new file on the server
 	 *
-	 * @param type $ftp_file
-	 * @return boolean
+	 * @param string $ftp_file The file to create
+	 * @return boolean Whether or not the file was created successfully
 	 */
 	public function create_file($ftp_file)
 	{
@@ -987,11 +1038,11 @@ class ftp_connection
 	}
 
 	/**
-	 * Generates a direcotry listing for the current directory
+	 * Generates a directory listing for the current directory
 	 *
-	 * @param type $ftp_path
-	 * @param type $search
-	 * @return boolean
+	 * @param string $ftp_path The path to the directory
+	 * @param bool $search Whether or not to get a recursive directory listing
+	 * @return string|boolean The results of the command or false if unsuccessful
 	 */
 	public function list_dir($ftp_path = '', $search = false)
 	{
@@ -1032,11 +1083,11 @@ class ftp_connection
 	}
 
 	/**
-	 * Determins the current dirctory we are in
+	 * Determines the current directory we are in
 	 *
-	 * @param type $file
-	 * @param type $listing
-	 * @return string|boolean
+	 * @param string $file The name of a file
+	 * @param string $listing A directory listing or null to generate one
+	 * @return string|boolean The name of the file or false if it wasn't found
 	 */
 	public function locate($file, $listing = null)
 	{
@@ -1081,8 +1132,8 @@ class ftp_connection
 	/**
 	 * Creates a new directory on the server
 	 *
-	 * @param type $ftp_dir
-	 * @return boolean
+	 * @param string $ftp_dir The name of the directory to create
+	 * @return boolean Whether or not the operation was successful
 	 */
 	public function create_dir($ftp_dir)
 	{
@@ -1104,9 +1155,9 @@ class ftp_connection
 	/**
 	 * Detects the current path
 	 *
-	 * @param type $filesystem_path
-	 * @param type $lookup_file
-	 * @return type
+	 * @param string $filesystem_path The full path from the filesystem
+	 * @param string $lookup_file The name of a file in the specified path
+	 * @return array An array of detected info - username, path from FTP root and whether or not the current path was found
 	 */
 	public function detect_path($filesystem_path, $lookup_file = null)
 	{
@@ -1156,7 +1207,7 @@ class ftp_connection
 	/**
 	 * Close the ftp connection
 	 *
-	 * @return boolean
+	 * @return boolean Always returns true
 	 */
 	public function close()
 	{

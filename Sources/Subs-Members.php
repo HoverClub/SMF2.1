@@ -6,11 +6,11 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
 if (!defined('SMF'))
@@ -26,16 +26,15 @@ if (!defined('SMF'))
  *   - removes all log entries concerning the deleted members, except the
  * error logs, ban logs and moderation logs.
  *   - removes these members' personal messages (only the inbox), avatars,
- * ban entries, theme settings, moderator positions, poll votes, and
- * karma votes.
+ * ban entries, theme settings, moderator positions, poll and votes.
  *   - updates member statistics afterwards.
  *
- * @param array $users
- * @param bool $check_not_admin = false
+ * @param int|array $users The ID of a user or an array of user IDs
+ * @param bool $check_not_admin Whether to verify that the users aren't admins
  */
 function deleteMembers($users, $check_not_admin = false)
 {
-	global $sourcedir, $modSettings, $user_info, $smcFunc;
+	global $sourcedir, $modSettings, $user_info, $smcFunc, $cache_enable;
 
 	// Try give us a while to sort this out...
 	@set_time_limit(600);
@@ -78,10 +77,11 @@ function deleteMembers($users, $check_not_admin = false)
 		SELECT id_member, member_name, CASE WHEN id_group = {int:admin_group} OR FIND_IN_SET({int:admin_group}, additional_groups) != 0 THEN 1 ELSE 0 END AS is_admin
 		FROM {db_prefix}members
 		WHERE id_member IN ({array_int:user_list})
-		LIMIT ' . count($users),
+		LIMIT {int:limit}',
 		array(
 			'user_list' => $users,
 			'admin_group' => 1,
+			'limit' => count($users),
 		)
 	);
 	$admins = array();
@@ -124,7 +124,7 @@ function deleteMembers($users, $check_not_admin = false)
 		);
 
 		// Remove any cached data if enabled.
-		if (!empty($modSettings['cache_enable']) && $modSettings['cache_enable'] >= 2)
+		if (!empty($cache_enable) && $cache_enable >= 2)
 			cache_put_data('user_settings-' . $user[0], null, 60);
 	}
 
@@ -132,7 +132,7 @@ function deleteMembers($users, $check_not_admin = false)
 	$smcFunc['db_query']('', '
 		UPDATE {db_prefix}messages
 		SET id_member = {int:guest_id}' . (!empty($modSettings['deleteMembersRemovesEmail']) ? ',
-		poster_email = {string:blank_email}' : '') . '
+			poster_email = {string:blank_email}' : '') . '
 		WHERE id_member IN ({array_int:users})',
 		array(
 			'guest_id' => 0,
@@ -218,6 +218,24 @@ function deleteMembers($users, $check_not_admin = false)
 		)
 	);
 
+	// Delete anything they liked.
+	$smcFunc['db_query']('', '
+		DELETE FROM {db_prefix}user_likes
+		WHERE id_member IN ({array_int:users})',
+		array(
+			'users' => $users,
+		)
+	);
+
+	// Delete their mentions
+	$smcFunc['db_query']('', '
+		DELETE FROM {db_prefix}mentions
+		WHERE id_member IN ({array_int:members})',
+		array(
+			'members' => $users,
+		)
+	);
+
 	// Delete the logs...
 	$smcFunc['db_query']('', '
 		DELETE FROM {db_prefix}log_actions
@@ -252,14 +270,6 @@ function deleteMembers($users, $check_not_admin = false)
 		)
 	);
 	$smcFunc['db_query']('', '
-		DELETE FROM {db_prefix}log_karma
-		WHERE id_target IN ({array_int:users})
-			OR id_executor IN ({array_int:users})',
-		array(
-			'users' => $users,
-		)
-	);
-	$smcFunc['db_query']('', '
 		DELETE FROM {db_prefix}log_mark_read
 		WHERE id_member IN ({array_int:users})',
 		array(
@@ -289,13 +299,6 @@ function deleteMembers($users, $check_not_admin = false)
 	);
 	$smcFunc['db_query']('', '
 		DELETE FROM {db_prefix}log_topics
-		WHERE id_member IN ({array_int:users})',
-		array(
-			'users' => $users,
-		)
-	);
-	$smcFunc['db_query']('', '
-		DELETE FROM {db_prefix}collapsed_categories
 		WHERE id_member IN ({array_int:users})',
 		array(
 			'users' => $users,
@@ -424,14 +427,14 @@ function deleteMembers($users, $check_not_admin = false)
  * The function will adjust member statistics.
  * If an error is detected will fatal error on all errors unless return_errors is true.
  *
- * @param array $regOptions
- * @param bool $return_errors - specify whether to return the errors
- * @return int, the ID of the newly created member
+ * @param array $regOptions An array of registration options
+ * @param bool $return_errors Whether to return the errors
+ * @return int|array The ID of the newly registered user or an array of error info if $return_errors is true
  */
 function registerMember(&$regOptions, $return_errors = false)
 {
 	global $scripturl, $txt, $modSettings, $context, $sourcedir;
-	global $user_info, $options, $settings, $smcFunc;
+	global $user_info, $smcFunc;
 
 	loadLanguage('Login');
 
@@ -460,21 +463,15 @@ function registerMember(&$regOptions, $return_errors = false)
 			fatal_lang_error('register_only_once', false);
 	}
 
-	// What method of authorization are we going to use?
-	if (empty($regOptions['auth_method']) || !in_array($regOptions['auth_method'], array('password', 'openid')))
-	{
-		if (!empty($regOptions['openid']))
-			$regOptions['auth_method'] = 'openid';
-		else
-			$regOptions['auth_method'] = 'password';
-	}
-
 	// Spaces and other odd characters are evil...
-	$regOptions['username'] = preg_replace('~[\t\n\r\x0B\0' . ($context['utf8'] ? '\x{A0}' : '\xA0') . ']+~' . ($context['utf8'] ? 'u' : ''), ' ', $regOptions['username']);
+	$regOptions['username'] = trim(preg_replace('~[\t\n\r \x0B\0' . ($context['utf8'] ? '\x{A0}\x{AD}\x{2000}-\x{200F}\x{201F}\x{202F}\x{3000}\x{FEFF}' : '\x00-\x08\x0B\x0C\x0E-\x19\xA0') . ']+~' . ($context['utf8'] ? 'u' : ''), ' ', $regOptions['username']));
+
+	// Convert character encoding for non-utf8mb4 database
+	$regOptions['username'] = $smcFunc['htmlspecialchars']($regOptions['username']);
 
 	// @todo Separate the sprintf?
-	if (empty($regOptions['email']) || preg_match('~^[0-9A-Za-z=_+\-/][0-9A-Za-z=_\'+\-/\.]*@[\w\-]+(\.[\w\-]+)*(\.[\w]{2,6})$~', $regOptions['email']) === 0 || strlen($regOptions['email']) > 255)
-		$reg_errors[] = array('done', sprintf($txt['valid_email_needed'], $smcFunc['htmlspecialchars']($regOptions['username'])));
+	if (empty($regOptions['email']) || !filter_var($regOptions['email'], FILTER_VALIDATE_EMAIL) || strlen($regOptions['email']) > 255)
+		$reg_errors[] = array('lang', 'profile_error_bad_email');
 
 	$username_validation_errors = validateUsername(0, $regOptions['username'], true, !empty($regOptions['check_reserved_name']));
 	if (!empty($username_validation_errors))
@@ -486,39 +483,36 @@ function registerMember(&$regOptions, $return_errors = false)
 		$validation_code = generateValidationCode();
 
 	// If you haven't put in a password generate one.
-	if ($regOptions['interface'] == 'admin' && $regOptions['password'] == '' && $regOptions['auth_method'] == 'password')
+	if ($regOptions['interface'] == 'admin' && $regOptions['password'] == '')
 	{
 		mt_srand(time() + 1277);
 		$regOptions['password'] = generateValidationCode();
 		$regOptions['password_check'] = $regOptions['password'];
 	}
 	// Does the first password match the second?
-	elseif ($regOptions['password'] != $regOptions['password_check'] && $regOptions['auth_method'] == 'password')
+	elseif ($regOptions['password'] != $regOptions['password_check'])
 		$reg_errors[] = array('lang', 'passwords_dont_match');
 
 	// That's kind of easy to guess...
 	if ($regOptions['password'] == '')
 	{
-		if ($regOptions['auth_method'] == 'password')
-			$reg_errors[] = array('lang', 'no_password');
-		else
-			$regOptions['password'] = sha1(mt_rand());
+		$reg_errors[] = array('lang', 'no_password');
 	}
 
 	// Now perform hard password validation as required.
-	if (!empty($regOptions['check_password_strength']))
+	if (!empty($regOptions['check_password_strength']) && $regOptions['password'] != '')
 	{
 		$passwordError = validatePassword($regOptions['password'], $regOptions['username'], array($regOptions['email']));
 
 		// Password isn't legal?
 		if ($passwordError != null)
-			$reg_errors[] = array('lang', 'profile_error_password_' . $passwordError);
+		{
+			$errorCode = array('lang', 'profile_error_password_' . $passwordError, false);
+			if ($passwordError == 'short')
+				$errorCode[] = array(empty($modSettings['password_strength']) ? 4 : 8);
+			$reg_errors[] = $errorCode;
+		}
 	}
-
-	// If they are using an OpenID that hasn't been verified yet error out.
-	// @todo Change this so they can register without having to attempt a login first
-	if ($regOptions['auth_method'] == 'openid' && (empty($_SESSION['openid']['verified']) || $_SESSION['openid']['openid_uri'] != $regOptions['openid']))
-		$reg_errors[] = array('lang', 'openid_not_verified');
 
 	// You may not be allowed to register this email.
 	if (!empty($regOptions['check_email_ban']))
@@ -538,10 +532,11 @@ function registerMember(&$regOptions, $return_errors = false)
 	);
 	// @todo Separate the sprintf?
 	if ($smcFunc['db_num_rows']($request) != 0)
-		$reg_errors[] = array('lang', 'email_in_use', false, array(htmlspecialchars($regOptions['email'])));
+		$reg_errors[] = array('lang', 'email_in_use', false, array($smcFunc['htmlspecialchars']($regOptions['email'])));
+
 	$smcFunc['db_free_result']($request);
 
-	// Perhaps someone else wants to check this user
+	// Perhaps someone else wants to check this user.
 	call_integration_hook('integrate_register_check', array(&$regOptions, &$reg_errors));
 
 	// If we found any errors we need to do something about it right away!
@@ -598,8 +593,8 @@ function registerMember(&$regOptions, $return_errors = false)
 	$regOptions['register_vars'] = array(
 		'member_name' => $regOptions['username'],
 		'email_address' => $regOptions['email'],
-		'passwd' => sha1(strtolower($regOptions['username']) . $regOptions['password']),
-		'password_salt' => substr(md5(mt_rand()), 0, 4) ,
+		'passwd' => hash_password($regOptions['username'], $regOptions['password']),
+		'password_salt' => bin2hex($smcFunc['random_bytes'](16)),
 		'posts' => 0,
 		'date_registered' => time(),
 		'member_ip' => $regOptions['interface'] == 'admin' ? '127.0.0.1' : $user_info['ip'],
@@ -607,20 +602,13 @@ function registerMember(&$regOptions, $return_errors = false)
 		'validation_code' => $validation_code,
 		'real_name' => $regOptions['username'],
 		'personal_text' => $modSettings['default_personal_text'],
-		'pm_email_notify' => 1,
 		'id_theme' => 0,
 		'id_post_group' => 4,
 		'lngfile' => '',
 		'buddy_list' => '',
 		'pm_ignore_list' => '',
-		'message_labels' => '',
 		'website_title' => '',
 		'website_url' => '',
-		'location' => '',
-		'icq' => '',
-		'aim' => '',
-		'yim' => '',
-		'skype' => '',
 		'time_format' => '',
 		'signature' => '',
 		'avatar' => '',
@@ -630,7 +618,7 @@ function registerMember(&$regOptions, $return_errors = false)
 		'additional_groups' => '',
 		'ignore_boards' => '',
 		'smiley_set' => '',
-		'openid_uri' => (!empty($regOptions['openid']) ? $regOptions['openid'] : ''),
+		'timezone' => empty($regOptions['timezone']) || !in_array($regOptions['timezone'], smf_list_timezones()) ? 'UTC' : $regOptions['timezone'],
 	);
 
 	// Setup the activation status on this new account so it is correct - firstly is it an under age account?
@@ -652,7 +640,7 @@ function registerMember(&$regOptions, $return_errors = false)
 
 	if (isset($regOptions['memberGroup']))
 	{
-		// Make sure the id_group will be valid, if this is an administator.
+		// Make sure the id_group will be valid, if this is an administrator.
 		$regOptions['register_vars']['id_group'] = $regOptions['memberGroup'] == 1 && !allowedTo('admin_forum') ? 0 : $regOptions['memberGroup'];
 
 		// Check if this group is assignable.
@@ -675,10 +663,6 @@ function registerMember(&$regOptions, $return_errors = false)
 			$regOptions['register_vars']['id_group'] = 0;
 	}
 
-	// ICQ cannot be zero.
-	if (isset($regOptions['extra_register_vars']['icq']) && empty($regOptions['extra_register_vars']['icq']))
-		$regOptions['extra_register_vars']['icq'] = '';
-
 	// Integrate optional member settings to be set.
 	if (!empty($regOptions['extra_register_vars']))
 		foreach ($regOptions['extra_register_vars'] as $var => $value)
@@ -693,12 +677,14 @@ function registerMember(&$regOptions, $return_errors = false)
 	// Right, now let's prepare for insertion.
 	$knownInts = array(
 		'date_registered', 'posts', 'id_group', 'last_login', 'instant_messages', 'unread_messages',
-		'new_pm', 'pm_prefs', 'gender', 'hide_email', 'show_online', 'pm_email_notify', 'karma_good', 'karma_bad',
-		'notify_announcements', 'notify_send_body', 'notify_regularity', 'notify_types',
+		'new_pm', 'pm_prefs', 'show_online',
 		'id_theme', 'is_activated', 'id_msg_last_visit', 'id_post_group', 'total_time_logged_in', 'warning',
 	);
 	$knownFloats = array(
 		'time_offset',
+	);
+	$knownInets = array(
+		'member_ip', 'member_ip2',
 	);
 
 	// Call an optional function to validate the users' input.
@@ -713,6 +699,8 @@ function registerMember(&$regOptions, $return_errors = false)
 			$type = 'int';
 		elseif (in_array($var, $knownFloats))
 			$type = 'float';
+		elseif (in_array($var, $knownInets))
+			$type = 'inet';
 		elseif ($var == 'birthdate')
 			$type = 'date';
 
@@ -721,13 +709,13 @@ function registerMember(&$regOptions, $return_errors = false)
 	}
 
 	// Register them into the database.
-	$smcFunc['db_insert']('',
+	$memberID = $smcFunc['db_insert']('',
 		'{db_prefix}members',
 		$column_names,
 		$values,
-		array('id_member')
+		array('id_member'),
+		1
 	);
-	$memberID = $smcFunc['db_insert_id']('{db_prefix}members', 'id_member');
 
 	// Call an optional function as notification of registration.
 	call_integration_hook('integrate_post_register', array(&$regOptions, &$theme_vars, &$memberID));
@@ -751,6 +739,11 @@ function registerMember(&$regOptions, $return_errors = false)
 			array('id_member', 'variable')
 		);
 	}
+
+	// Log their acceptance of the agreement and privacy policy, for future reference.
+	foreach (array('agreement_accepted', 'policy_accepted') as $key)
+		if (!empty($theme_vars[$key]))
+			logAction($key, array('member_affected' => $memberID, 'applicator' => $memberID), 'user');
 
 	// If it's enabled, increase the registrations for today.
 	trackStats(array('registers' => '+'));
@@ -777,7 +770,7 @@ function registerMember(&$regOptions, $return_errors = false)
 
 			$emaildata = loadEmailTemplate($email_message, $replacements);
 
-			sendmail($regOptions['email'], $emaildata['subject'], $emaildata['body'], null, null, false, 0);
+			sendmail($regOptions['email'], $emaildata['subject'], $emaildata['body'], null, $email_message . $memberID, $emaildata['is_html'], 0);
 		}
 
 		// All admins are finished here.
@@ -794,10 +787,9 @@ function registerMember(&$regOptions, $return_errors = false)
 				'USERNAME' => $regOptions['username'],
 				'PASSWORD' => $regOptions['password'],
 				'FORGOTPASSWORDLINK' => $scripturl . '?action=reminder',
-				'OPENID' => !empty($regOptions['openid']) ? $regOptions['openid'] : '',
 			);
-			$emaildata = loadEmailTemplate('register_' . ($regOptions['auth_method'] == 'openid' ? 'openid_' : '') . 'immediate', $replacements);
-			sendmail($regOptions['email'], $emaildata['subject'], $emaildata['body'], null, null, false, 0);
+			$emaildata = loadEmailTemplate('register_immediate', $replacements);
+			sendmail($regOptions['email'], $emaildata['subject'], $emaildata['body'], null, 'register', $emaildata['is_html'], 0);
 		}
 
 		// Send admin their notification.
@@ -811,7 +803,6 @@ function registerMember(&$regOptions, $return_errors = false)
 			'USERNAME' => $regOptions['username'],
 			'PASSWORD' => $regOptions['password'],
 			'FORGOTPASSWORDLINK' => $scripturl . '?action=reminder',
-			'OPENID' => !empty($regOptions['openid']) ? $regOptions['openid'] : '',
 		);
 
 		if ($regOptions['require'] == 'activation')
@@ -820,14 +811,15 @@ function registerMember(&$regOptions, $return_errors = false)
 				'ACTIVATIONLINKWITHOUTCODE' => $scripturl . '?action=activate;u=' . $memberID,
 				'ACTIVATIONCODE' => $validation_code,
 			);
+
 		else
 			$replacements += array(
-				'COPPALINK' => $scripturl . '?action=coppa;u=' . $memberID,
+				'COPPALINK' => $scripturl . '?action=coppa;member=' . $memberID,
 			);
 
-		$emaildata = loadEmailTemplate('register_' . ($regOptions['auth_method'] == 'openid' ? 'openid_' : '') . ($regOptions['require'] == 'activation' ? 'activate' : 'coppa'), $replacements);
+		$emaildata = loadEmailTemplate('register_' . ($regOptions['require'] == 'activation' ? 'activate' : 'coppa'), $replacements);
 
-		sendmail($regOptions['email'], $emaildata['subject'], $emaildata['body'], null, null, false, 0);
+		sendmail($regOptions['email'], $emaildata['subject'], $emaildata['body'], null, 'reg_' . $regOptions['require'] . $memberID, $emaildata['is_html'], 0);
 	}
 	// Must be awaiting approval.
 	else
@@ -837,12 +829,11 @@ function registerMember(&$regOptions, $return_errors = false)
 			'USERNAME' => $regOptions['username'],
 			'PASSWORD' => $regOptions['password'],
 			'FORGOTPASSWORDLINK' => $scripturl . '?action=reminder',
-			'OPENID' => !empty($regOptions['openid']) ? $regOptions['openid'] : '',
 		);
 
-		$emaildata = loadEmailTemplate('register_' . ($regOptions['auth_method'] == 'openid' ? 'openid_' : '') . 'pending', $replacements);
+		$emaildata = loadEmailTemplate('register_pending', $replacements);
 
-		sendmail($regOptions['email'], $emaildata['subject'], $emaildata['body'], null, null, false, 0);
+		sendmail($regOptions['email'], $emaildata['subject'], $emaildata['body'], null, 'reg_pending', $emaildata['is_html'], 0);
 
 		// Admin gets informed here...
 		adminNotify('approval', $memberID, $regOptions['username']);
@@ -857,7 +848,6 @@ function registerMember(&$regOptions, $return_errors = false)
 	return $memberID;
 }
 
-
 /**
  * Check if a name is in the reserved words list.
  * (name, current member id, name/username?.)
@@ -866,14 +856,15 @@ function registerMember(&$regOptions, $return_errors = false)
  * - the id_member variable is used to ignore duplicate matches with the
  * current member.
  *
- * @param string $name
- * @param int $current_ID_MEMBER
- * @param bool $is_name
- * @param bool $fatal
+ * @param string $name The name to check
+ * @param int $current_id_member The ID of the current member (to avoid false positives with the current member)
+ * @param bool $is_name Whether we're checking against reserved names or just usernames
+ * @param bool $fatal Whether to die with a fatal error if the name is reserved
+ * @return bool|void False if name is not reserved, otherwise true if $fatal is false or dies with a fatal_lang_error if $fatal is true
  */
-function isReservedName($name, $current_ID_MEMBER = 0, $is_name = true, $fatal = true)
+function isReservedName($name, $current_id_member = 0, $is_name = true, $fatal = true)
 {
-	global $user_info, $modSettings, $smcFunc, $context;
+	global $modSettings, $smcFunc;
 
 	$name = preg_replace_callback('~(&#(\d{1,7}|x[0-9a-fA-F]{1,6});)~', 'replaceEntities__callback', $name);
 	$checkName = $smcFunc['strtolower']($name);
@@ -922,21 +913,18 @@ function isReservedName($name, $current_ID_MEMBER = 0, $is_name = true, $fatal =
 			else
 				return true;
 
-	// Get rid of any SQL parts of the reserved name...
-	$checkName = strtr($name, array('_' => '\\_', '%' => '\\%'));
-
-	// Make sure they don't want someone else's name.
 	$request = $smcFunc['db_query']('', '
 		SELECT id_member
 		FROM {db_prefix}members
-		WHERE ' . (empty($current_ID_MEMBER) ? '' : 'id_member != {int:current_member}
-			AND ') . '({raw:real_name} LIKE {string:check_name} OR {raw:member_name} LIKE {string:check_name})
+		WHERE ' . (empty($current_id_member) ? '' : 'id_member != {int:current_member}
+			AND ') . '({raw:real_name} {raw:operator} LOWER({string:check_name}) OR {raw:member_name} {raw:operator} LOWER({string:check_name}))
 		LIMIT 1',
 		array(
 			'real_name' => $smcFunc['db_case_sensitive'] ? 'LOWER(real_name)' : 'real_name',
 			'member_name' => $smcFunc['db_case_sensitive'] ? 'LOWER(member_name)' : 'member_name',
-			'current_member' => $current_ID_MEMBER,
+			'current_member' => $current_id_member,
 			'check_name' => $checkName,
+			'operator' => strpos($checkName, '%') || strpos($checkName, '_') ? 'LIKE' : '=',
 		)
 	);
 	if ($smcFunc['db_num_rows']($request) > 0)
@@ -963,7 +951,12 @@ function isReservedName($name, $current_ID_MEMBER = 0, $is_name = true, $fatal =
 	}
 
 	// Okay, they passed.
-	return false;
+	$is_reserved = false;
+
+	// Maybe a mod wants to perform further checks?
+	call_integration_hook('integrate_check_name', array($checkName, &$is_reserved, $current_id_member, $is_name));
+
+	return $is_reserved;
 }
 
 // Get a list of groups that have a given permission (on a given board).
@@ -973,14 +966,13 @@ function isReservedName($name, $current_ID_MEMBER = 0, $is_name = true, $fatal =
  * If board_id is not null, a board permission is assumed.
  * The function takes different permission settings into account.
  *
- * @param string $permission
- * @param int $board_id = null
- * @return an array containing an array for the allowed membergroup ID's
- * and an array for the denied membergroup ID's.
+ * @param string $permission The permission to check
+ * @param int $board_id = null If set, checks permissions for the specified board
+ * @return array An array containing two arrays - 'allowed', which has which groups are allowed to do it and 'denied' which has the groups that are denied
  */
 function groupsAllowedTo($permission, $board_id = null)
 {
-	global $modSettings, $board_info, $smcFunc;
+	global $board_info, $smcFunc;
 
 	// Admins are allowed to do anything.
 	$member_groups = array(
@@ -988,7 +980,7 @@ function groupsAllowedTo($permission, $board_id = null)
 		'denied' => array(),
 	);
 
-	// Assume we're dealing with regular permissions (like profile_view_own).
+	// Assume we're dealing with regular permissions (like profile_view).
 	if ($board_id === null)
 	{
 		$request = $smcFunc['db_query']('', '
@@ -1100,9 +1092,9 @@ function groupsAllowedTo($permission, $board_id = null)
  * Takes different permission settings into account.
  * Takes possible moderators (on board 'board_id') into account.
  *
- * @param string $permission
- * @param int $board_id = null
- * @return an array containing member ID's.
+ * @param string $permission The permission to check
+ * @param int $board_id If set, checks permission for that specific board
+ * @return array An array containing the IDs of the members having that permission
  */
 function membersAllowedTo($permission, $board_id = null)
 {
@@ -1121,10 +1113,9 @@ function membersAllowedTo($permission, $board_id = null)
 	$request = $smcFunc['db_query']('', '
 		SELECT mem.id_member
 		FROM {db_prefix}members AS mem' . ($include_moderators || $exclude_moderators ? '
-			LEFT JOIN {db_prefix}moderators AS mods ON (mods.id_member = mem.id_member AND mods.id_board = {int:board_id})
-			LEFT JOIN {db_prefix}moderator_groups AS modgs ON (modgs.id_group IN ({array_int:all_member_groups}))' : '') . '
-		WHERE (' . ($include_moderators ? 'mods.id_member IS NOT NULL OR modgs.id_group IS NOT NULL OR ' : '') . 'mem.id_group IN ({array_int:member_groups_allowed}) OR FIND_IN_SET({raw:member_group_allowed_implode}, mem.additional_groups) != 0 OR mem.id_post_group IN ({array_int:member_groups_allowed}))' . (empty($member_groups['denied']) ? '' : '
-			AND NOT (' . ($exclude_moderators ? 'mods.id_member IS NOT NULL OR modgs.id_group IS NOT NULL OR ' : '') . 'mem.id_group IN ({array_int:member_groups_denied}) OR FIND_IN_SET({raw:member_group_denied_implode}, mem.additional_groups) != 0 OR mem.id_post_group IN ({array_int:member_groups_denied}))'),
+			LEFT JOIN {db_prefix}moderators AS mods ON (mods.id_member = mem.id_member AND mods.id_board = {int:board_id})' : '') . '
+		WHERE (' . ($include_moderators ? 'mods.id_member IS NOT NULL OR ' : '') . 'mem.id_group IN ({array_int:member_groups_allowed}) OR FIND_IN_SET({raw:member_group_allowed_implode}, mem.additional_groups) != 0 OR mem.id_post_group IN ({array_int:member_groups_allowed}))' . (empty($member_groups['denied']) ? '' : '
+			AND NOT (' . ($exclude_moderators ? 'mods.id_member IS NOT NULL OR ' : '') . 'mem.id_group IN ({array_int:member_groups_denied}) OR FIND_IN_SET({raw:member_group_denied_implode}, mem.additional_groups) != 0 OR mem.id_post_group IN ({array_int:member_groups_denied}))'),
 		array(
 			'member_groups_allowed' => $member_groups['allowed'],
 			'member_groups_denied' => $member_groups['denied'],
@@ -1148,15 +1139,21 @@ function membersAllowedTo($permission, $board_id = null)
  * Does not check for any permissions.
  * If add_to_post_count is set, the member's post count is increased.
  *
- * @param int $memID
- * @param string $email = false
- * @param string $membername = false
- * @param bool $post_count = false
- * @return nothing
+ * @param int $memID The ID of the original poster
+ * @param bool|string $email If set, should be the email of the poster
+ * @param bool|string $membername If set, the membername of the poster
+ * @param bool $post_count Whether to adjust post counts
+ * @return array An array containing the number of messages, topics and reports updated
  */
 function reattributePosts($memID, $email = false, $membername = false, $post_count = false)
 {
-	global $smcFunc;
+	global $smcFunc, $modSettings;
+
+	$updated = array(
+		'messages' => 0,
+		'topics' => 0,
+		'reports' => 0,
+	);
 
 	// Firstly, if email and username aren't passed find out the members email address and name.
 	if ($email === false && $membername === false)
@@ -1177,13 +1174,14 @@ function reattributePosts($memID, $email = false, $membername = false, $post_cou
 	// If they want the post count restored then we need to do some research.
 	if ($post_count)
 	{
+		$recycle_board = !empty($modSettings['recycle_enable']) && !empty($modSettings['recycle_board']) ? (int) $modSettings['recycle_board'] : 0;
 		$request = $smcFunc['db_query']('', '
 			SELECT COUNT(*)
 			FROM {db_prefix}messages AS m
 				INNER JOIN {db_prefix}boards AS b ON (b.id_board = m.id_board AND b.count_posts = {int:count_posts})
 			WHERE m.id_member = {int:guest_id}
-				AND m.approved = {int:is_approved}
-				AND m.icon != {string:recycled_icon}' . (empty($email) ? '' : '
+				AND m.approved = {int:is_approved}' . (!empty($recycle_board) ? '
+				AND m.id_board != {int:recycled_board}' : '') . (empty($email) ? '' : '
 				AND m.poster_email = {string:email_address}') . (empty($membername) ? '' : '
 				AND m.poster_name = {string:member_name}'),
 			array(
@@ -1192,7 +1190,7 @@ function reattributePosts($memID, $email = false, $membername = false, $post_cou
 				'email_address' => $email,
 				'member_name' => $membername,
 				'is_approved' => 1,
-				'recycled_icon' => 'recycled',
+				'recycled_board' => $recycle_board,
 			)
 		);
 		list ($messageCount) = $smcFunc['db_fetch_row']($request);
@@ -1219,20 +1217,54 @@ function reattributePosts($memID, $email = false, $membername = false, $post_cou
 			'member_name' => $membername,
 		)
 	);
+	$updated['messages'] = $smcFunc['db_affected_rows']();
 
-	// ...and the topics too!
-	$smcFunc['db_query']('', '
-		UPDATE {db_prefix}topics as t, {db_prefix}messages as m
-		SET t.id_member_started = {int:memID}
-		WHERE m.id_member = {int:memID}
-			AND t.id_first_msg = m.id_msg',
-		array(
-			'memID' => $memID,
-		)
-	);
+	// Did we update any messages?
+	if ($updated['messages'] > 0)
+	{
+		// First, check for updated topics.
+		$smcFunc['db_query']('', '
+			UPDATE {db_prefix}topics AS t
+			SET id_member_started = {int:memID}
+			WHERE t.id_first_msg = (
+				SELECT m.id_msg
+				FROM {db_prefix}messages m
+				WHERE m.id_member = {int:memID}
+					AND m.id_msg = t.id_first_msg
+					AND ' . $query . '
+				)',
+			array(
+				'memID' => $memID,
+				'email_address' => $email,
+				'member_name' => $membername,
+			)
+		);
+		$updated['topics'] = $smcFunc['db_affected_rows']();
+
+		// Second, check for updated reports.
+		$smcFunc['db_query']('', '
+			UPDATE {db_prefix}log_reported AS lr
+			SET id_member = {int:memID}
+			WHERE lr.id_msg = (
+				SELECT m.id_msg
+				FROM {db_prefix}messages m
+				WHERE m.id_member = {int:memID}
+					AND m.id_msg = lr.id_msg
+					AND ' . $query . '
+				)',
+			array(
+				'memID' => $memID,
+				'email_address' => $email,
+				'member_name' => $membername,
+			)
+		);
+		$updated['reports'] = $smcFunc['db_affected_rows']();
+	}
 
 	// Allow mods with their own post tables to reattribute posts as well :)
- 	call_integration_hook('integrate_reattribute_posts', array($memID, $email, $membername, $post_count));
+	call_integration_hook('integrate_reattribute_posts', array($memID, $email, $membername, $post_count, &$updated));
+
+	return $updated;
 }
 
 /**
@@ -1243,40 +1275,64 @@ function reattributePosts($memID, $email = false, $membername = false, $post_cou
  */
 function BuddyListToggle()
 {
-	global $user_info;
+	global $user_info, $smcFunc;
 
 	checkSession('get');
 
-	isAllowedTo('profile_identity_own');
+	isAllowedTo('profile_extra_own');
 	is_not_guest();
 
-	if (empty($_REQUEST['u']))
+	$userReceiver = (int) !empty($_REQUEST['u']) ? $_REQUEST['u'] : 0;
+
+	if (empty($userReceiver))
 		fatal_lang_error('no_access', false);
-	$_REQUEST['u'] = (int) $_REQUEST['u'];
 
 	// Remove if it's already there...
-	if (in_array($_REQUEST['u'], $user_info['buddies']))
-		$user_info['buddies'] = array_diff($user_info['buddies'], array($_REQUEST['u']));
+	if (in_array($userReceiver, $user_info['buddies']))
+		$user_info['buddies'] = array_diff($user_info['buddies'], array($userReceiver));
+
 	// ...or add if it's not and if it's not you.
-	elseif ($user_info['id'] != $_REQUEST['u'])
-		$user_info['buddies'][] = (int) $_REQUEST['u'];
+	elseif ($user_info['id'] != $userReceiver)
+	{
+		$user_info['buddies'][] = $userReceiver;
+
+		// And add a nice alert. Don't abuse though!
+		if ((cache_get_data('Buddy-sent-' . $user_info['id'] . '-' . $userReceiver, 86400)) == null)
+		{
+			$smcFunc['db_insert']('insert',
+				'{db_prefix}background_tasks',
+				array('task_file' => 'string', 'task_class' => 'string', 'task_data' => 'string', 'claimed_time' => 'int'),
+				array('$sourcedir/tasks/Buddy-Notify.php', 'Buddy_Notify_Background', $smcFunc['json_encode'](array(
+					'receiver_id' => $userReceiver,
+					'id_member' => $user_info['id'],
+					'member_name' => $user_info['username'],
+					'time' => time(),
+				)), 0),
+				array('id_task')
+			);
+
+			// Store this in a cache entry to avoid creating multiple alerts. Give it a long life cycle.
+			cache_put_data('Buddy-sent-' . $user_info['id'] . '-' . $userReceiver, '1', 86400);
+		}
+	}
 
 	// Update the settings.
 	updateMemberData($user_info['id'], array('buddy_list' => implode(',', $user_info['buddies'])));
 
 	// Redirect back to the profile
-	redirectexit('action=profile;u=' . $_REQUEST['u']);
+	redirectexit('action=profile;u=' . $userReceiver);
 }
 
 /**
  * Callback for createList().
  *
- * @param $start
- * @param $items_per_page
- * @param $sort
- * @param $where
- * @param $where_params
- * @param $get_duplicates
+ * @param int $start Which item to start with (for pagination purposes)
+ * @param int $items_per_page How many items to show per page
+ * @param string $sort An SQL query indicating how to sort the results
+ * @param string $where An SQL query used to filter the results
+ * @param array $where_params An array of parameters for $where
+ * @param bool $get_duplicates Whether to get duplicates (used for the admin member list)
+ * @return array An array of information for displaying the list of members
  */
 function list_getMembers($start, $items_per_page, $sort, $where, $where_params = array(), $get_duplicates = false)
 {
@@ -1284,7 +1340,7 @@ function list_getMembers($start, $items_per_page, $sort, $where, $where_params =
 
 	$request = $smcFunc['db_query']('', '
 		SELECT
-			mem.id_member, mem.member_name, mem.real_name, mem.email_address, mem.icq, mem.aim, mem.yim, mem.skype, mem.member_ip, mem.member_ip2, mem.last_login,
+			mem.id_member, mem.member_name, mem.real_name, mem.email_address, mem.member_ip, mem.member_ip2, mem.last_login,
 			mem.posts, mem.is_activated, mem.date_registered, mem.id_group, mem.additional_groups, mg.group_name
 		FROM {db_prefix}members AS mem
 			LEFT JOIN {db_prefix}membergroups AS mg ON (mg.id_group = mem.id_group)
@@ -1300,7 +1356,11 @@ function list_getMembers($start, $items_per_page, $sort, $where, $where_params =
 
 	$members = array();
 	while ($row = $smcFunc['db_fetch_assoc']($request))
+	{
+		$row['member_ip'] = inet_dtop($row['member_ip']);
+		$row['member_ip2'] = inet_dtop($row['member_ip2']);
 		$members[] = $row;
+	}
 	$smcFunc['db_free_result']($request);
 
 	// If we want duplicates pass the members array off.
@@ -1313,8 +1373,9 @@ function list_getMembers($start, $items_per_page, $sort, $where, $where_params =
 /**
  * Callback for createList().
  *
- * @param $where
- * @param $where_params
+ * @param string $where An SQL query to filter the results
+ * @param array $where_params An array of parameters for $where
+ * @return int The number of members matching the given situation
  */
 function list_getNumMembers($where, $where_params = array())
 {
@@ -1342,9 +1403,9 @@ function list_getNumMembers($where, $where_params = array())
 }
 
 /**
- * Find potential duplicate registation members based on the same IP address
+ * Find potential duplicate registration members based on the same IP address
  *
- * @param $members
+ * @param array $members An array of members
  */
 function populateDuplicateMembers(&$members)
 {
@@ -1374,8 +1435,8 @@ function populateDuplicateMembers(&$members)
 		SELECT
 			id_member, member_name, email_address, member_ip, member_ip2, is_activated
 		FROM {db_prefix}members
-		WHERE member_ip IN ({array_string:ips})
-			OR member_ip2 IN ({array_string:ips})',
+		WHERE member_ip IN ({array_inet:ips})
+			OR member_ip2 IN ({array_inet:ips})',
 		array(
 			'ips' => $ips,
 		)
@@ -1385,6 +1446,8 @@ function populateDuplicateMembers(&$members)
 	while ($row = $smcFunc['db_fetch_assoc']($request))
 	{
 		//$duplicate_ids[] = $row['id_member'];
+		$row['member_ip'] = inet_dtop($row['member_ip']);
+		$row['member_ip2'] = inet_dtop($row['member_ip2']);
 
 		$member_context = array(
 			'id' => $row['id_member'],
@@ -1410,7 +1473,7 @@ function populateDuplicateMembers(&$members)
 			INNER JOIN {db_prefix}members AS mem ON (mem.id_member = m.id_member)
 		WHERE m.id_member != 0
 			' . (!empty($duplicate_ids) ? 'AND m.id_member NOT IN ({array_int:duplicate_ids})' : '') . '
-			AND m.poster_ip IN ({array_string:ips})',
+			AND m.poster_ip IN ({array_inet:ips})',
 		array(
 			'duplicate_ids' => $duplicate_ids,
 			'ips' => $ips,
@@ -1420,6 +1483,8 @@ function populateDuplicateMembers(&$members)
 	$had_ips = array();
 	while ($row = $smcFunc['db_fetch_assoc']($request))
 	{
+		$row['poster_ip'] = inet_dtop($row['poster_ip']);
+
 		// Don't collect lots of the same.
 		if (isset($had_ips[$row['poster_ip']]) && in_array($row['id_member'], $had_ips[$row['poster_ip']]))
 			continue;
@@ -1462,24 +1527,14 @@ function populateDuplicateMembers(&$members)
 
 /**
  * Generate a random validation code.
- * @todo Err. Whatcha doin' here.
  *
- * @return type
+ * @return string A random validation code
  */
 function generateValidationCode()
 {
-	global $smcFunc, $modSettings;
+	global $smcFunc;
 
-	$request = $smcFunc['db_query']('get_random_number', '
-		SELECT RAND()',
-		array(
-		)
-	);
-
-	list ($dbRand) = $smcFunc['db_fetch_row']($request);
-	$smcFunc['db_free_result']($request);
-
-	return substr(preg_replace('/\W/', '', sha1(microtime() . mt_rand() . $dbRand . $modSettings['rand_seed'])), 0, 10);
+	return bin2hex($smcFunc['random_bytes'](5));
 }
 
 ?>

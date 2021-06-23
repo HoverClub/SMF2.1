@@ -2,24 +2,11 @@ a:link, a:hover, a:visited {
 	text-decoration: underline;
 }
 /* These divisions wrap the forum sections when a forum width is set. */
-#wrapper, .frame {
-	width: 90%;
-	max-width: 1140px;
-}
 h1.forumtitle {
-	font-size: 2em;
-	font-family: tahoma;
-	margin: 0;
-	padding: 32px 12px 16px 12px;
-	float: left;
-	font-weight: normal;
 	color: #a85400;
-	text-shadow: -1px -1px 0 rgba(0,0,0,0.5), 1px 1px 0 #fff;
+	text-shadow: -1px -1px 0 rgba(0, 0, 0, 0.5), 1px 1px 0 #fff;
 }
-/* Tweak the SMF logo */
-img#smflogo {
-	margin: 26px 0 0 0;
-}
+
 #inner_wrap {
 	min-height: 80px;
 }
@@ -30,10 +17,20 @@ img#smflogo {
 	max-width: 100%;
 	float: left;
 }
+#main_content_section {
+	display: flex;
+	flex-wrap: wrap;
+}
+/* Add the gradient here if there is no upper_section */
+#main_content_section:first-child {
+	margin: 2px;
+	padding-top: 1em;
+	border-radius: 6px;
+	background: linear-gradient(to bottom, #e2e9f3 0%, #fff 90px);
+}
 #main_steps {
-	float: right;
-	width: 50%;
-	padding: 0 0 1em 0;
+	order: 0;
+	width: 49%;
 }
 #main_steps h2 {
 	font-size: 1.2em;
@@ -42,77 +39,49 @@ img#smflogo {
 	margin: 0 1em 0.5em 0;
 	color: #d05800;
 }
-#main_steps ul {
-	list-style: none;
-	padding: 0 0.5em;
-	margin: 0;
+ul.steps_list {
 	line-height: 1.8em;
+	color: #c2c2c2;
 }
-#main_steps ul li.stepdone {
-	color: #aaa;
-}
-#main_steps ul li.stepcurrent {
+ul.steps_list li.stepcurrent {
 	color: #222;
 	font-weight: bold;
 }
-#main_steps ul li.stepwaiting {
+ul.steps_list .stepcurrent ~ li {
 	color: #666;
 }
-#progress_bar {
-	position: relative;
-	font-size: 1.2em;
-	height: 2.3em;
-	border: 1px solid black;
-	border-radius: 2px;
-	background: #fff;
-	float: left;
-	margin: 0.6em 0 0 4em;
-	width: 33%;
+#install_progress {
+	order: -1;
+	margin: 0.32em 2% 0 0;
+	width: 49%;
 }
-#overall_text, #step_text {
-	z-index: 2;
-	color: #111;
-	font-weight: bold;
+.progress_bar {
+	line-height: 2em;
+	max-width: 500px;
+}
+.progress_bar + h3, .progress_bar + .progress_bar {
+	margin-top: 1.5em;
+}
+.progress_bar h3 {
 	position: absolute;
-	top: 0.5em;
-	left: -3.3em;
+	font-weight: normal;
+	font-size: 1.1em;
+	left: 0.5em;
+	z-index: 3;
+	text-shadow: 1px 1px rgba(255, 255, 255, .4);
 }
-
-#overall_text_upgrade, #step_text_upgrade {
-	z-index: 2;
-	color: #111;
-	font-weight: bold;
-	position: absolute;
-	top: .5em;
-	left: -3.3em;
-}
-#overall_progress, #step_progress {
-	height: 2.3em;
-	z-index: 1;
-	background-color: #ffd000;
-}
-
-#overall_progress_upgrade, #step_progress_upgrade {
-	height: 2.5em;
-	z-index: 1;
-	background: #6BB247;
-	margin: 0px 3px 0px 0px;
-}
-.over_progress {
-
-margin: -33px 5px 0 10px;
-}
-
-#step_progress {
-	background: #ffd000;
+#substep_bar_div {
+	line-height: 1.6em;
 }
 #substep_progress {
-	height: 2.3em;
-	z-index: 1;
-	background: #eebaf4;
+	background-color: #eebaf4;
+}
+.time_elapsed {
+	margin-top: 1em;
 }
 #main_screen {
-	padding: 1em 1em 0.5em 1em;
+	width: 100%;
+	margin-top: 2em;
 }
 #main_screen h2 {
 	font-size: 1.2em;
@@ -121,34 +90,60 @@ margin: -33px 5px 0 10px;
 	margin: 0 0 0.5em 0;
 	color: #d05800;
 }
-.panel form div{
+.panel form div {
 	max-height: 560px;
-	overflow: auto;
 }
-.panel p, .panel h3 {
-	margin: 0 0.5em 1em 0.5em;
+.panel p, .panel h3, .panel ul {
+	margin: 0 0 1em 0;
 }
-.panel ul {
-	margin: 0 0.5em 1em 0.5em;
+.error {
+	padding: 0.5em 0;
 }
-.error_message {
-	color: red;
-	padding: 0.5em;
-}
-.panel .button_submit, .panel .button_link {
-	font-size: 1em;
+.panel .button {
 	font-weight: bold;
-	color: #333;
-	padding: 3px 6px;
-	text-decoration: none;
 }
-.panel .button_submit:hover, .panel .button_link:hover {
+.panel .button:hover {
 	color: #af6700;
 	text-decoration: none;
 }
 .panel .clear {
 	padding: 1em 0 0 0;
 	overflow: auto;
+}
+.upgrade_settings li + li {
+	margin-top: 0.5em;
+}
+.buttons {
+	margin-top: 1em;
+}
+#commess, #indexmsg {
+	font-weight: bold;
+}
+#indexmsg {
+	font-style: italic;
+}
+.error_content {
+	margin: 2.5ex;
+	font-family: monospace;
+}
+#debug_section {
+	overflow: auto;
+	max-height: 8.4em; /* 6 lines of text */
+	line-height: 1.4em;
+}
+dl.settings dt, dl.settings dd {
+	width: 50%;
+}
+dl.settings.adminlogin dt {
+	width: 20ch;
+}
+dl.settings.adminlogin dd {
+	width: calc(100% - 20ch);
+}
+@media (max-width: 480px) {
+	dl.settings.adminlogin dt, dl.settings.adminlogin dd {
+		width: 100%;
+	}
 }
 /* [WIP] Warning: this next bit may cause trouble. */
 /* It's just to hide an empty div when the submits are not shown. */
@@ -157,28 +152,32 @@ margin: -33px 5px 0 10px;
 	display: none;
 }
 /* End [WIP] */
-#time_elapsed {
-	clear: both;
-	padding: 1em 1em 0 1em;
-	border: 1px solid green;
-	/* [WIP] */
-	background: /*#f0f4f7*/ #fcfcfc;
-	margin: 1em 0.9em 0 0.9em;
-	padding: 6px 8px 8px 8px;
-	border: 1px solid #ccc;
-	border-radius: 5px;
-	box-shadow: 0 -2px 2px rgba(0,0,0,0.1);
-	/* End [WIP] */
+
+
+/* Now make the installer and upgrader adaptive */
+
+@media screen and (max-width: 950px) {
+
+	.progress_bar span {
+		float: right;
+	}
 }
 
-#progress {
-	position: relative;
-	font-size: 1.2em;
-	height: 2.5em;
-	border: 1px solid black;
-	border-radius: 2px;
-	background: #fff;
-	float: left;
-	margin: 0.6em 0 0 4em;
-	width: 33%;
+@media screen and (max-width: 700px) {
+
+	#install_progress, #main_steps {
+		width: 100%;
+		margin-right: 0;
+	}
+	#install_progress {
+		order: 0;
+		margin-top: 2em;
+	}
+	dl.settings dd {
+		-ms-grid-column: 1;
+		grid-column: 1;
+	}
+	dl.settings dt {
+		margin: 10px 0 0;
+	}
 }

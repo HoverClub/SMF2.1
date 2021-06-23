@@ -4,17 +4,18 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
 if (!defined('SMF'))
 	die('No direct access...');
 
 /**
+ * Class browser_detector
  *  This class is an experiment for the job of correctly detecting browsers and settings needed for them.
  * - Detects the following browsers
  * - Opera, Webkit, Firefox, Web_tv, Konqueror, IE, Gecko
@@ -23,21 +24,18 @@ if (!defined('SMF'))
  * - Firefox Versions: 1, 2, 3 .... 11 ...
  * - Chrome Versions: 1 ... 18 ...
  * - IE Versions: 4, 5, 5.5, 6, 7, 8, 9, 10 ... mobile and Mac
+ * - MS Edge
  * - Nokia
  */
 class browser_detector
 {
 	/**
-	 * Holds all browsers information. Its contents will be placed into $context['browser'].
-	 *
-	 * @var array
+	 * @var array Holds all the browser information. Its contents will be placed into $context['browser']
 	 */
 	private $_browsers = null;
 
 	/**
-	 * Holds if the detected device may be a mobile one
-	 *
-	 * @var type
+	 * @var boolean Whether or not this might be a mobile device
 	 */
 	private $_is_mobile = null;
 
@@ -59,6 +57,9 @@ class browser_detector
 		// One at a time, one at a time, and in this order too
 		if ($this->isOpera())
 			$this->setupOpera();
+		// Meh...
+		elseif ($this->isEdge())
+			$this->setupEdge();
 		// Them webkits need to be set up too
 		elseif ($this->isWebkit())
 			$this->setupWebkit();
@@ -73,6 +74,9 @@ class browser_detector
 		$this->isOperaMini();
 		$this->isOperaMobi();
 
+		// IE11 seems to be fine by itself without being lumped into the "is_ie" category
+		$this->isIe11();
+
 		// Be you robot or human?
 		if ($user_info['possibly_robot'])
 		{
@@ -80,7 +84,7 @@ class browser_detector
 			$this->_browsers['possibly_robot'] = !empty($user_info['possibly_robot']);
 
 			// Robots shouldn't be logging in or registering.  So, they aren't a bot.  Better to be wrong than sorry (or people won't be able to log in!), anyway.
-			if ((isset($_REQUEST['action']) && in_array($_REQUEST['action'], array('login', 'login2', 'register'))) || !$user_info['is_guest'])
+			if ((isset($_REQUEST['action']) && in_array($_REQUEST['action'], array('login', 'login2', 'register', 'signup'))) || !$user_info['is_guest'])
 				$this->_browsers['possibly_robot'] = false;
 		}
 		else
@@ -88,6 +92,9 @@ class browser_detector
 
 		// Fill out the historical array as needed to support old mods that don't use isBrowser
 		$this->fillInformation();
+
+		// Make it easy to check if the browser is on a mobile device.
+		$this->_browsers['is_mobile'] = $this->_is_mobile;
 
 		// Last step ...
 		$this->setupBrowserPriority();
@@ -97,9 +104,10 @@ class browser_detector
 	}
 
 	/**
-	* Determine if the browser is Opera or not
-	* @return boolean true if the browser is Opera otherwise false
-	*/
+	 * Determine if the browser is Opera or not
+	 *
+	 * @return boolean Whether or not this is Opera
+	 */
 	function isOpera()
 	{
 		if (!isset($this->_browsers['is_opera']))
@@ -108,9 +116,10 @@ class browser_detector
 	}
 
 	/**
-	* Determine if the browser is IE or not
-	* @return boolean true if the browser is IE otherwise false
-	*/
+	 * Determine if the browser is IE or not
+	 *
+	 * @return boolean true Whether or not the browser is IE
+	 */
 	function isIe()
 	{
 		// I'm IE, Yes I'm the real IE; All you other IEs are just imitating.
@@ -120,9 +129,36 @@ class browser_detector
 	}
 
 	/**
-	* Determine if the browser is a Webkit based one or not
-	* @return boolean true if the browser is Webkit based otherwise false
-	*/
+	 * Determine if the browser is IE11 or not
+	 *
+	 * @return boolean Whether or not the browser is IE11
+	 */
+	function isIe11()
+	{
+		// IE11 is a bit different than earlier versions
+		// The isGecko() part is to ensure we get this right...
+		if (!isset($this->_browsers['is_ie11']))
+			$this->_browsers['is_ie11'] = strpos($_SERVER['HTTP_USER_AGENT'], 'Trident') !== false && $this->isGecko();
+		return $this->_browsers['is_ie11'];
+	}
+
+	/**
+	 * Determine if the browser is Edge or not
+	 *
+	 * @return boolean Whether or not the browser is Edge
+	 */
+	function isEdge()
+	{
+		if (!isset($this->_browsers['is_edge']))
+			$this->_browsers['is_edge'] = strpos($_SERVER['HTTP_USER_AGENT'], 'Edge') !== false;
+		return $this->_browsers['is_edge'];
+	}
+
+	/**
+	 * Determine if the browser is a Webkit based one or not
+	 *
+	 * @return boolean Whether or not this is a Webkit-based browser
+	 */
 	function isWebkit()
 	{
 		if (!isset($this->_browsers['is_webkit']))
@@ -131,9 +167,10 @@ class browser_detector
 	}
 
 	/**
-	* Determine if the browser is Firefox or one of its variants
-	* @return boolean true if the browser is Firefox otherwise false
-	*/
+	 * Determine if the browser is Firefox or one of its variants
+	 *
+	 * @return boolean Whether or not this is Firefox (or one of its variants)
+	 */
 	function isFirefox()
 	{
 		if (!isset($this->_browsers['is_firefox']))
@@ -142,9 +179,10 @@ class browser_detector
 	}
 
 	/**
-	* Determine if the browser is WebTv or not
-	* @return boolean true if the browser is WebTv otherwise false
-	*/
+	 * Determine if the browser is WebTv or not
+	 *
+	 * @return boolean Whether or not this is WebTV
+	 */
 	function isWebTv()
 	{
 		if (!isset($this->_browsers['is_web_tv']))
@@ -153,9 +191,10 @@ class browser_detector
 	}
 
 	/**
-	* Determine if the browser is konqueror or not
-	* @return boolean true if the browser is konqueror otherwise false
-	*/
+	 * Determine if the browser is konqueror or not
+	 *
+	 * @return boolean Whether or not this is Konqueror
+	 */
 	function isKonqueror()
 	{
 		if (!isset($this->_browsers['is_konqueror']))
@@ -164,9 +203,10 @@ class browser_detector
 	}
 
 	/**
-	* Determine if the browser is Gecko or not
-	* @return boolean true if the browser is Gecko otherwise false
-	*/
+	 * Determine if the browser is Gecko or not
+	 *
+	 * @return boolean Whether or not this is a Gecko-based browser
+	 */
 	function isGecko()
 	{
 		if (!isset($this->_browsers['is_gecko']))
@@ -175,9 +215,10 @@ class browser_detector
 	}
 
 	/**
-	* Determine if the browser is OperaMini or not
-	* @return boolean true if the browser is OperaMini otherwise false
-	*/
+	 * Determine if the browser is Opera Mini or not
+	 *
+	 * @return boolean Whether or not this is Opera Mini
+	 */
 	function isOperaMini()
 	{
 		if (!isset($this->_browsers['is_opera_mini']))
@@ -188,9 +229,10 @@ class browser_detector
 	}
 
 	/**
-	* Determine if the browser is OperaMobi or not
-	* @return boolean true if the browser is OperaMobi otherwise false
-	*/
+	 * Determine if the browser is Opera Mobile or not
+	 *
+	 * @return boolean Whether or not this is Opera Mobile
+	 */
 	function isOperaMobi()
 	{
 		if (!isset($this->_browsers['is_opera_mobi']))
@@ -242,7 +284,7 @@ class browser_detector
 	 * Additional IE checks and settings.
 	 *  - determines the version of the IE browser in use
 	 *  - detects ie4 onward
-	 *  - attempts to distinguish between IE and IE in compatabilty view
+	 *  - attempts to distinguish between IE and IE in compatibility view
 	 *  - checks for old IE on macs as well, since we can
 	 */
 	private function setupIe()
@@ -257,12 +299,12 @@ class browser_detector
 			$this->_browsers['is_ie' . $msie_match[1]] = true;
 		}
 
-		// "modern" ie uses trident 4=ie8, 5=ie9, 6=ie10, even in compatability view
+		// "modern" ie uses trident 4=ie8, 5=ie9, 6=ie10, 7=ie11 even in compatibility view
 		if (preg_match('~Trident/([0-9.])~i', $_SERVER['HTTP_USER_AGENT'], $trident_match) === 1)
 		{
 			$this->_browsers['is_ie' . ((int) $trident_match[1] + 4)] = true;
 
-			// If trident is set, see the (if any) msie tag in the user agent matches ... if not its in some compatablity view
+			// If trident is set, see the (if any) msie tag in the user agent matches ... if not its in some compatibility view
 			if (isset($msie_match[1]) && ($msie_match[1] < $trident_match[1] + 4))
 				$this->_browsers['is_ie_compat_view'] = true;
 		}
@@ -321,10 +363,19 @@ class browser_detector
 	}
 
 	/**
+	 * Sets the version number for MS edge.
+	 */
+	private function setupEdge()
+	{
+		if (preg_match('~Edge[\/]([0-9][0-9]?[\.][0-9][0-9])~i', $_SERVER['HTTP_USER_AGENT'], $match) === 1)
+			$this->_browsers['is_edge' . (int) $match[1]] = true;
+	}
+
+	/**
 	 * Get the browser name that we will use in the <body id="this_browser">
 	 *  - The order of each browser in $browser_priority is important
 	 *  - if you want to have id='ie6' and not id='ie' then it must appear first in the list of ie browsers
-	 *  - only sets browsers that may need some help via css for compatablity
+	 *  - only sets browsers that may need some help via css for compatibility
 	 */
 	private function setupBrowserPriority()
 	{
@@ -341,7 +392,9 @@ class browser_detector
 				'is_ie8' => 'ie8',
 				'is_ie9' => 'ie9',
 				'is_ie10' => 'ie10',
+				'is_ie11' => 'ie11',
 				'is_ie' => 'ie',
+				'is_edge' => 'edge',
 				'is_firefox' => 'firefox',
 				'is_chrome' => 'chrome',
 				'is_safari' => 'safari',
@@ -354,7 +407,7 @@ class browser_detector
 
 			$context['browser_body_id'] = 'smf';
 			$active = array_reverse(array_keys($this->_browsers, true));
-			foreach ($active as $key => $browser)
+			foreach ($active as $browser)
 			{
 				if (array_key_exists($browser, $browser_priority))
 				{
@@ -390,7 +443,8 @@ class browser_detector
 			'is_android' => false,
 			'is_chrome' => false,
 			'is_safari' => false,
-			'is_gecko'  => false,
+			'is_gecko' => false,
+			'is_edge' => false,
 			'is_ie8' => false,
 			'is_ie7' => false,
 			'is_ie6' => false,
@@ -404,3 +458,5 @@ class browser_detector
 		);
 	}
 }
+
+?>

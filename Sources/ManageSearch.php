@@ -6,11 +6,11 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
 if (!defined('SMF'))
@@ -24,12 +24,12 @@ if (!defined('SMF'))
  * Called by ?action=admin;area=managesearch.
  * Requires the admin_forum permission.
  *
- * @uses ManageSearch template.
- * @uses Search language file.
+ * Uses ManageSearch template.
+ * Uses Search language file.
  */
 function ManageSearch()
 {
-	global $context, $txt, $scripturl;
+	global $context, $txt;
 
 	isAllowedTo('admin_forum');
 
@@ -47,8 +47,6 @@ function ManageSearch()
 		'removefulltext' => 'EditSearchMethod',
 		'createmsgindex' => 'CreateMessageIndex',
 	);
-
-	call_integration_hook('integrate_manage_search', array(&$subActions));
 
 	// Default the sub-action to 'edit search settings'.
 	$_REQUEST['sa'] = isset($_REQUEST['sa']) && isset($subActions[$_REQUEST['sa']]) ? $_REQUEST['sa'] : 'weights';
@@ -73,17 +71,20 @@ function ManageSearch()
 		),
 	);
 
+	call_integration_hook('integrate_manage_search', array(&$subActions));
+
 	// Call the right function for this sub-action.
-	$subActions[$_REQUEST['sa']]();
+	call_helper($subActions[$_REQUEST['sa']]);
 }
 
 /**
  * Edit some general settings related to the search function.
  * Called by ?action=admin;area=managesearch;sa=settings.
  * Requires the admin_forum permission.
+ * @uses template_show_settings()
  *
- * @param $return_config
- * @uses ManageSearch template, 'modify_settings' sub-template.
+ * @param bool $return_config Whether or not to return the config_vars array (used for admin search)
+ * @return void|array Returns nothing or returns the $config_vars array if $return_config is true
  */
 function EditSearchSettings($return_config = false)
 {
@@ -91,16 +92,15 @@ function EditSearchSettings($return_config = false)
 
 	// What are we editing anyway?
 	$config_vars = array(
-			// Permission...
-			array('permissions', 'search_posts'),
-			// Some simple settings.
-			array('check', 'simpleSearch'),
-			array('check', 'search_dropdown'),
-			array('int', 'search_results_per_page'),
-			array('int', 'search_max_results', 'subtext' => $txt['search_max_results_disable']),
+		// Permission...
+		array('permissions', 'search_posts'),
+		// Some simple settings.
+		array('int', 'search_results_per_page'),
+		array('int', 'search_max_results', 'subtext' => $txt['search_max_results_disable']),
 		'',
-			// Some limitations.
-			array('int', 'search_floodcontrol_time', 'subtext' => $txt['search_floodcontrol_time_desc'], 6, 'postinput' => $txt['seconds']),
+
+		// Some limitations.
+		array('int', 'search_floodcontrol_time', 'subtext' => $txt['search_floodcontrol_time_desc'], 6, 'postinput' => $txt['seconds']),
 	);
 
 	call_integration_hook('integrate_modify_search_settings', array(&$config_vars));
@@ -109,7 +109,7 @@ function EditSearchSettings($return_config = false)
 	require_once($sourcedir . '/Search.php');
 	$searchAPI = findSearchAPI();
 	if (is_callable(array($searchAPI, 'searchSettings')))
-		call_user_func_array($searchAPI->searchSettings, array(&$config_vars));
+		call_user_func_array(array($searchAPI, 'searchSettings'), array(&$config_vars));
 
 	if ($return_config)
 		return $config_vars;
@@ -130,6 +130,7 @@ function EditSearchSettings($return_config = false)
 		if (empty($_POST['search_results_per_page']))
 			$_POST['search_results_per_page'] = !empty($modSettings['search_results_per_page']) ? $modSettings['search_results_per_page'] : $modSettings['defaultMaxMessages'];
 		saveDBSettings($config_vars);
+		$_SESSION['adm-save'] = true;
 		redirectexit('action=admin;area=managesearch;sa=settings;' . $context['session_var'] . '=' . $context['session_id']);
 	}
 
@@ -148,7 +149,7 @@ function EditSearchSettings($return_config = false)
  * Called by ?action=admin;area=managesearch;sa=weights.
  * Requires the admin_forum permission.
  *
- * @uses ManageSearch template, 'modify_weights' sub-template.
+ * @uses template_modify_weights()
  */
 function EditWeights()
 {
@@ -200,13 +201,12 @@ function EditWeights()
  * Called by ?action=admin;area=managesearch;sa=method.
  * Requires the admin_forum permission.
  *
- * @uses ManageSearch template, 'select_search_method' sub-template.
+ * @uses template_select_search_method()
  */
 function EditSearchMethod()
 {
 	global $txt, $context, $modSettings, $smcFunc, $db_type, $db_prefix;
 
-	$context[$context['admin_menu_name']]['current_subsection'] = 'method';
 	$context['page_title'] = $txt['search_method_title'];
 	$context['sub_template'] = 'select_search_method';
 	$context['supports_fulltext'] = $smcFunc['db_search_support']('fulltext');
@@ -223,23 +223,44 @@ function EditSearchMethod()
 		checkSession('get');
 		validateToken('admin-msm', 'get');
 
-		// Make sure it's gone before creating it.
-		$smcFunc['db_query']('', '
-			ALTER TABLE {db_prefix}messages
-			DROP INDEX body',
-			array(
-				'db_error_skip' => true,
-			)
-		);
+		if ($db_type == 'postgresql')
+		{
+			$smcFunc['db_query']('', '
+				DROP INDEX IF EXISTS {db_prefix}messages_ftx',
+				array(
+					'db_error_skip' => true,
+				)
+			);
 
-		$smcFunc['db_query']('', '
-			ALTER TABLE {db_prefix}messages
-			ADD FULLTEXT body (body)',
-			array(
-			)
-		);
+			$language_ftx = $smcFunc['db_search_language']();
 
-		$context['fulltext_index'] = 'body';
+			$smcFunc['db_query']('', '
+				CREATE INDEX {db_prefix}messages_ftx ON {db_prefix}messages
+				USING gin(to_tsvector({string:language},body))',
+				array(
+					'language' => $language_ftx
+				)
+			);
+		}
+		else
+		{
+			// Make sure it's gone before creating it.
+			$smcFunc['db_query']('', '
+				ALTER TABLE {db_prefix}messages
+				DROP INDEX body',
+				array(
+					'db_error_skip' => true,
+				)
+			);
+
+			$smcFunc['db_query']('', '
+				ALTER TABLE {db_prefix}messages
+				ADD FULLTEXT body (body)',
+				array(
+				)
+			);
+		}
+		redirectexit('action=admin;area=managesearch;sa=method');
 	}
 	elseif (!empty($_REQUEST['sa']) && $_REQUEST['sa'] == 'removefulltext' && !empty($context['fulltext_index']))
 	{
@@ -255,13 +276,12 @@ function EditSearchMethod()
 			)
 		);
 
-		$context['fulltext_index'] = '';
-
 		// Go back to the default search method.
 		if (!empty($modSettings['search_index']) && $modSettings['search_index'] == 'fulltext')
 			updateSettings(array(
 				'search_index' => '',
 			));
+		redirectexit('action=admin;area=managesearch;sa=method');
 	}
 	elseif (!empty($_REQUEST['sa']) && $_REQUEST['sa'] == 'removecustom')
 	{
@@ -289,6 +309,7 @@ function EditSearchMethod()
 			updateSettings(array(
 				'search_index' => '',
 			));
+		redirectexit('action=admin;area=managesearch;sa=method');
 	}
 	elseif (isset($_POST['save']))
 	{
@@ -300,6 +321,7 @@ function EditSearchMethod()
 			'search_force_index' => isset($_POST['search_force_index']) ? '1' : '0',
 			'search_match_words' => isset($_POST['search_match_words']) ? '1' : '0',
 		));
+		redirectexit('action=admin;area=managesearch;sa=method');
 	}
 
 	$context['table_info'] = array(
@@ -310,7 +332,7 @@ function EditSearchMethod()
 	);
 
 	// Get some info about the messages table, to show its size and index size.
-	if ($db_type == 'mysql' || $db_type == 'mysqli')
+	if ($db_type == 'mysql')
 	{
 		if (preg_match('~^`(.+?)`\.(.+?)$~', $db_prefix, $match) !== 0)
 			$request = $smcFunc['db_query']('', '
@@ -371,20 +393,33 @@ function EditSearchMethod()
 	elseif ($db_type == 'postgresql')
 	{
 		// In order to report the sizes correctly we need to perform vacuum (optimize) on the tables we will be using.
-		db_extend();
-		$temp_tables = $smcFunc['db_list_tables']();
-		foreach ($temp_tables as $table)
-			if ($table == $db_prefix. 'messages' || $table == $db_prefix. 'log_search_words')
-				$smcFunc['db_optimize_table']($table);
+		//db_extend();
+		//$temp_tables = $smcFunc['db_list_tables']();
+		//foreach ($temp_tables as $table)
+		//	if ($table == $db_prefix. 'messages' || $table == $db_prefix. 'log_search_words')
+		//		$smcFunc['db_optimize_table']($table);
 
 		// PostGreSql has some hidden sizes.
 		$request = $smcFunc['db_query']('', '
-			SELECT relname, relpages * 8 *1024 AS "KB" FROM pg_class
-			WHERE relname = {string:messages} OR relname = {string:log_search_words}
-			ORDER BY relpages DESC',
+			SELECT
+				indexname,
+				pg_relation_size(quote_ident(t.tablename)::text) AS table_size,
+				pg_relation_size(quote_ident(indexrelname)::text) AS index_size
+			FROM pg_tables t
+				LEFT OUTER JOIN pg_class c ON t.tablename=c.relname
+				LEFT OUTER JOIN
+					(SELECT c.relname AS ctablename, ipg.relname AS indexname, indexrelname FROM pg_index x
+						JOIN pg_class c ON c.oid = x.indrelid
+						JOIN pg_class ipg ON ipg.oid = x.indexrelid
+						JOIN pg_stat_all_indexes psai ON x.indexrelid = psai.indexrelid)
+					AS foo
+					ON t.tablename = foo.ctablename
+			WHERE t.schemaname= {string:schema} and (
+				indexname = {string:messages_ftx} OR indexname = {string:log_search_words} )',
 			array(
-				'messages' => $db_prefix. 'messages',
-				'log_search_words' => $db_prefix. 'log_search_words',
+				'messages_ftx' => $db_prefix . 'messages_ftx',
+				'log_search_words' => $db_prefix . 'log_search_words',
+				'schema' => 'public',
 			)
 		);
 
@@ -392,17 +427,16 @@ function EditSearchMethod()
 		{
 			while ($row = $smcFunc['db_fetch_assoc']($request))
 			{
-				if ($row['relname'] == $db_prefix . 'messages')
+				if ($row['indexname'] == $db_prefix . 'messages_ftx')
 				{
-					$context['table_info']['data_length'] = (int) $row['KB'];
-					$context['table_info']['index_length'] = (int) $row['KB'];
-					// Doesn't support fulltext
-					$context['table_info']['fulltext_length'] = $txt['not_applicable'];
+					$context['table_info']['data_length'] = (int) $row['table_size'];
+					$context['table_info']['index_length'] = (int) $row['index_size'];
+					$context['table_info']['fulltext_length'] = (int) $row['index_size'];
 				}
-				elseif ($row['relname'] == $db_prefix. 'log_search_words')
+				elseif ($row['indexname'] == $db_prefix . 'log_search_words')
 				{
-					$context['table_info']['index_length'] = (int) $row['KB'];
-					$context['table_info']['custom_index_length'] = (int) $row['KB'];
+					$context['table_info']['index_length'] = (int) $row['index_size'];
+					$context['table_info']['custom_index_length'] = (int) $row['index_size'];
 				}
 			}
 			$smcFunc['db_free_result']($request);
@@ -449,8 +483,7 @@ function EditSearchMethod()
  * Requires the admin_forum permission.
  * Depending on the size of the message table, the process is divided in steps.
  *
- * @uses ManageSearch template, 'create_index', 'create_index_progress', and 'create_index_done'
- *  sub-templates.
+ * @uses template_create_index(), template_create_index_progress(), template_create_index_done()
  */
 function CreateMessageIndex()
 {
@@ -485,7 +518,7 @@ function CreateMessageIndex()
 
 	if (isset($_REQUEST['resume']) && !empty($modSettings['search_custom_index_resume']))
 	{
-		$context['index_settings'] = unserialize($modSettings['search_custom_index_resume']);
+		$context['index_settings'] = $smcFunc['json_decode']($modSettings['search_custom_index_resume'], true);
 		$context['start'] = (int) $context['index_settings']['resume_at'];
 		unset($context['index_settings']['resume_at']);
 		$context['step'] = 1;
@@ -498,8 +531,8 @@ function CreateMessageIndex()
 		$context['start'] = isset($_REQUEST['start']) ? (int) $_REQUEST['start'] : 0;
 		$context['step'] = isset($_REQUEST['step']) ? (int) $_REQUEST['step'] : 0;
 
-		// admin timeouts are painful when building these long indexes
-		if ($_SESSION['admin_time'] + 3300 < time() && $context['step'] >= 1)
+		// admin timeouts are painful when building these long indexes - but only if we actually have such things enabled
+		if (empty($modSettings['securityDisable']) && $_SESSION['admin_time'] + 3300 < time() && $context['step'] >= 1)
 			$_SESSION['admin_time'] = time();
 	}
 
@@ -618,7 +651,7 @@ function CreateMessageIndex()
 					break;
 				}
 				else
-					updateSettings(array('search_custom_index_resume' => serialize(array_merge($context['index_settings'], array('resume_at' => $context['start'])))));
+					updateSettings(array('search_custom_index_resume' => $smcFunc['json_encode'](array_merge($context['index_settings'], array('resume_at' => $context['start'])))));
 			}
 
 			// Since there are still two steps to go, 80% is the maximum here.
@@ -683,7 +716,7 @@ function CreateMessageIndex()
 	{
 		$context['sub_template'] = 'create_index_done';
 
-		updateSettings(array('search_index' => 'custom', 'search_custom_index_config' => serialize($context['index_settings'])));
+		updateSettings(array('search_index' => 'custom', 'search_custom_index_config' => $smcFunc['json_encode']($context['index_settings'])));
 		$smcFunc['db_query']('', '
 			DELETE FROM {db_prefix}settings
 			WHERE variable = {string:search_custom_index_resume}',
@@ -704,6 +737,9 @@ function CreateMessageIndex()
 function loadSearchAPIs()
 {
 	global $sourcedir, $txt;
+
+	// Ensure we have class.
+	require_once($sourcedir . '/Class-SearchAPI.php');
 
 	$apis = array();
 	if ($dh = opendir($sourcedir))
@@ -753,49 +789,78 @@ function detectFulltextIndex()
 {
 	global $smcFunc, $context, $db_prefix;
 
-	$request = $smcFunc['db_query']('', '
-		SHOW INDEX
-		FROM {db_prefix}messages',
-		array(
-		)
-	);
-	$context['fulltext_index'] = '';
-	if ($request !== false || $smcFunc['db_num_rows']($request) != 0)
-	{
-		while ($row = $smcFunc['db_fetch_assoc']($request))
-			if ($row['Column_name'] == 'body' && (isset($row['Index_type']) && $row['Index_type'] == 'FULLTEXT' || isset($row['Comment']) && $row['Comment'] == 'FULLTEXT'))
-				$context['fulltext_index'][] = $row['Key_name'];
-		$smcFunc['db_free_result']($request);
+	// We need this for db_get_version
+	db_extend();
 
-		if (is_array($context['fulltext_index']))
-			$context['fulltext_index'] = array_unique($context['fulltext_index']);
+	if ($smcFunc['db_title'] === POSTGRE_TITLE)
+	{
+		$request = $smcFunc['db_query']('', '
+			SELECT
+				indexname
+			FROM pg_tables t
+				LEFT OUTER JOIN
+					(SELECT c.relname AS ctablename, ipg.relname AS indexname, indexrelname FROM pg_index x
+						JOIN pg_class c ON c.oid = x.indrelid
+						JOIN pg_class ipg ON ipg.oid = x.indexrelid
+						JOIN pg_stat_all_indexes psai ON x.indexrelid = psai.indexrelid)
+					AS foo
+					ON t.tablename = foo.ctablename
+			WHERE t.schemaname= {string:schema} and indexname = {string:messages_ftx}',
+			array(
+				'schema' => 'public',
+				'messages_ftx' => $db_prefix . 'messages_ftx',
+			)
+		);
+		while ($row = $smcFunc['db_fetch_assoc']($request))
+			$context['fulltext_index'][] = $row['indexname'];
 	}
-
-	if (preg_match('~^`(.+?)`\.(.+?)$~', $db_prefix, $match) !== 0)
-		$request = $smcFunc['db_query']('', '
-			SHOW TABLE STATUS
-			FROM {string:database_name}
-			LIKE {string:table_name}',
-			array(
-				'database_name' => '`' . strtr($match[1], array('`' => '')) . '`',
-				'table_name' => str_replace('_', '\_', $match[2]) . 'messages',
-			)
-		);
 	else
+	{
 		$request = $smcFunc['db_query']('', '
-			SHOW TABLE STATUS
-			LIKE {string:table_name}',
+			SHOW INDEX
+			FROM {db_prefix}messages',
 			array(
-				'table_name' => str_replace('_', '\_', $db_prefix) . 'messages',
 			)
 		);
+		$context['fulltext_index'] = array();
+		if ($request !== false || $smcFunc['db_num_rows']($request) != 0)
+		{
+			while ($row = $smcFunc['db_fetch_assoc']($request))
+				if ($row['Column_name'] == 'body' && (isset($row['Index_type']) && $row['Index_type'] == 'FULLTEXT' || isset($row['Comment']) && $row['Comment'] == 'FULLTEXT'))
+					$context['fulltext_index'][] = $row['Key_name'];
+			$smcFunc['db_free_result']($request);
 
-	if ($request !== false)
-	{
-		while ($row = $smcFunc['db_fetch_assoc']($request))
-			if ((isset($row['Type']) && strtolower($row['Type']) != 'myisam') || (isset($row['Engine']) && strtolower($row['Engine']) != 'myisam'))
-				$context['cannot_create_fulltext'] = true;
-		$smcFunc['db_free_result']($request);
+			if (is_array($context['fulltext_index']))
+				$context['fulltext_index'] = array_unique($context['fulltext_index']);
+		}
+
+		if (preg_match('~^`(.+?)`\.(.+?)$~', $db_prefix, $match) !== 0)
+			$request = $smcFunc['db_query']('', '
+				SHOW TABLE STATUS
+				FROM {string:database_name}
+				LIKE {string:table_name}',
+				array(
+					'database_name' => '`' . strtr($match[1], array('`' => '')) . '`',
+					'table_name' => str_replace('_', '\_', $match[2]) . 'messages',
+				)
+			);
+		else
+			$request = $smcFunc['db_query']('', '
+				SHOW TABLE STATUS
+				LIKE {string:table_name}',
+				array(
+					'table_name' => str_replace('_', '\_', $db_prefix) . 'messages',
+				)
+			);
+
+		if ($request !== false)
+		{
+			while ($row = $smcFunc['db_fetch_assoc']($request))
+				if (isset($row['Engine']) && strtolower($row['Engine']) != 'myisam' && !(strtolower($row['Engine']) == 'innodb' && version_compare($smcFunc['db_get_version'](), '5.6.4', '>=')))
+					$context['cannot_create_fulltext'] = true;
+
+			$smcFunc['db_free_result']($request);
+		}
 	}
 }
 

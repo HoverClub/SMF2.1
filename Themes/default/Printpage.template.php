@@ -3,28 +3,28 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
+/**
+ * The header. Defines the look and layout of the page as well as a form for choosing print options.
+ */
 function template_print_above()
 {
-	global $context, $txt, $topic, $scripturl;
+	global $context, $txt, $modSettings;
 
-	$url_text = $scripturl . '?action=printpage;topic=' . $topic . '.0';
-	$url_images = $url_text . ';images';
-
-	echo '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"', $context['right_to_left'] ? ' dir="rtl"' : '', '>
+	echo '<!DOCTYPE html>
+<html', $context['right_to_left'] ? ' dir="rtl"' : '', '>
 	<head>
-		<meta http-equiv="Content-Type" content="text/html; charset=', $context['character_set'], '" />
-		<meta name="robots" content="noindex" />
-		<link rel="canonical" href="', $context['canonical_url'], '" />
+		<meta charset="', $context['character_set'], '">
+		<meta name="robots" content="noindex">
+		<link rel="canonical" href="', $context['canonical_url'], '">
 		<title>', $txt['print_page'], ' - ', $context['topic_subject'], '</title>
-		<style type="text/css">
+		<style>
 			body, a {
 				color: #000;
 				background: #fff;
@@ -59,7 +59,26 @@ function template_print_above()
 			table {
 				empty-cells: show;
 			}
-			blockquote, code {
+			blockquote {
+				margin: 0 0 8px 0;
+				padding: 6px 10px;
+				font-size: small;
+				border: 1px solid #d6dfe2;
+				border-left: 2px solid #aaa;
+				border-right: 2px solid #aaa;
+			}
+			blockquote cite {
+				display: block;
+				border-bottom: 1px solid #aaa;
+				font-size: 0.9em;
+			}
+			blockquote cite:before {
+				color: #aaa;
+				font-size: 22px;
+				font-style: normal;
+				margin-right: 5px;
+			}
+			code {
 				border: 1px solid #000;
 				margin: 3px;
 				padding: 1px;
@@ -68,10 +87,7 @@ function template_print_above()
 			code {
 				font: x-small monospace;
 			}
-			blockquote {
-				font-size: x-small;
-			}
-			.smalltext, .quoteheader, .codeheader {
+			.smalltext, .codeheader {
 				font-size: x-small;
 			}
 			.largetext {
@@ -89,36 +105,48 @@ function template_print_above()
 			.voted {
 				font-weight: bold;
 			}
+			#footer {
+				font-family: Verdana, sans-serif;
+			}
 			@media print {
 				.print_options {
-					display:none;
+					display: none;
 				}
 			}
 			@media screen {
 				.print_options {
-					margin:1em;
+					margin: 1em 0;
 				}
-			}
-		</style>
-	</head>
-	<body>
-		<div class="print_options">';
+			}';
 
-	// which option is set, text or text&images
-	if (isset($_REQUEST['images']))
+	if (!empty($modSettings['max_image_width']))
 		echo '
-			<a href="', $url_text, '">', $txt['print_page_text'], '</a> | <strong><a href="', $url_images, '">', $txt['print_page_images'], '</a></strong>';
-	else
+			.bbc_img {
+				max-width: ' . $modSettings['max_image_width'] . 'px;
+			}';
+
+	if (!empty($modSettings['max_image_height']))
 		echo '
-			<strong><a href="', $url_text, '">', $txt['print_page_text'], '</a></strong> | <a href="', $url_images, '">', $txt['print_page_images'], '</a>';
+			.bbc_img {
+				max-height: ' . $modSettings['max_image_height'] . 'px;
+			}';
 
 	echo '
-		</div>
+		</style>
+	</head>
+	<body>';
+
+	template_print_options();
+
+	echo '
 		<h1 id="title">', $context['forum_name_html_safe'], '</h1>
 		<h2 id="linktree">', $context['category_name'], ' => ', (!empty($context['parent_boards']) ? implode(' => ', $context['parent_boards']) . ' => ' : ''), $context['board_name'], ' => ', $txt['topic_started'], ': ', $context['poster_name'], ' ', $txt['search_on'], ' ', $context['post_time'], '</h2>
 		<div id="posts">';
 }
 
+/**
+ * The main page. This shows the relevant info in a printer-friendly format
+ */
 function template_main()
 {
 	global $context, $options, $txt, $scripturl, $topic;
@@ -144,7 +172,7 @@ function template_main()
 	{
 		echo '
 			<div class="postheader">
-				', $txt['title'], ': <strong>', $post['subject'], '</strong><br />
+				', $txt['title'], ': <strong>', $post['subject'], '</strong><br>
 				', $txt['post_by'], ': <strong>', $post['member'], '</strong> ', $txt['search_on'], ' <strong>', $post['time'], '</strong>
 			</div>
 			<div class="postbody">
@@ -154,31 +182,49 @@ function template_main()
 		if (isset($_GET['images']) && !empty($context['printattach'][$post['id_msg']]))
 		{
 			echo '
-				<hr />';
+				<hr>';
 
 			foreach ($context['printattach'][$post['id_msg']] as $attach)
 				echo '
-					<img width="' . $attach['width'] . '" height="' . $attach['height'] . '" src="', $scripturl . '?action=dlattach;topic=' . $topic . '.0;attach=' . $attach['id_attach'] . '" alt="" />';
+					<img width="' . $attach['width'] . '" height="' . $attach['height'] . '" src="', $scripturl . '?action=dlattach;topic=' . $topic . '.0;attach=' . $attach['id_attach'] . '" alt="">';
 		}
 
 		echo '
-			</div>';
+			</div><!-- .postbody -->';
 	}
 }
 
+/**
+ * The footer.
+ */
 function template_print_below()
 {
-	global $topic, $txt, $scripturl;
+	echo '
+		</div><!-- #posts -->';
+
+	template_print_options();
+
+	echo '
+		<div id="footer" class="smalltext">', theme_copyright(), '</div>
+	</body>
+</html>';
+}
+
+/**
+ * Displays the print page options
+ */
+function template_print_options()
+{
+	global $scripturl, $topic, $txt;
 
 	$url_text = $scripturl . '?action=printpage;topic=' . $topic . '.0';
 	$url_images = $url_text . ';images';
 
 	echo '
-		</div>
 		<div class="print_options">';
 
-	// Show the text / image links
-	if (isset($_GET['images']))
+	// Which option is set, text or text&images
+	if (isset($_REQUEST['images']))
 		echo '
 			<a href="', $url_text, '">', $txt['print_page_text'], '</a> | <strong><a href="', $url_images, '">', $txt['print_page_images'], '</a></strong>';
 	else
@@ -186,12 +232,7 @@ function template_print_below()
 			<strong><a href="', $url_text, '">', $txt['print_page_text'], '</a></strong> | <a href="', $url_images, '">', $txt['print_page_images'], '</a>';
 
 	echo '
-		</div>
-		<div id="footer" class="smalltext">
-			', theme_copyright(), '
-		</div>
-	</body>
-</html>';
+		</div><!-- .print_options -->';
 }
 
 ?>

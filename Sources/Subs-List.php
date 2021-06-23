@@ -5,11 +5,11 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
 if (!defined('SMF'))
@@ -17,17 +17,23 @@ if (!defined('SMF'))
 
 /**
  * Create a new list
- * @param array $listOptions
+ *
+ * @param array $listOptions An array of options for the list - 'id', 'columns', 'items_per_page', 'get_count', etc.
  */
-
 function createList($listOptions)
 {
-	global $context, $settings, $options, $txt, $modSettings, $scripturl;
+	global $context, $smcFunc;
 
 	assert(isset($listOptions['id']));
 	assert(isset($listOptions['columns']));
 	assert(is_array($listOptions['columns']));
-	assert((empty($listOptions['items_per_page']) || (isset($listOptions['get_count']['function'], $listOptions['base_href']) && is_numeric($listOptions['items_per_page']))));
+
+	if (!isset($listOptions['get_count']['value']))
+		assert((empty($listOptions['items_per_page']) ||
+			(isset($listOptions['get_count']['function'], $listOptions['base_href']) &&
+				is_numeric($listOptions['items_per_page']
+		))));
+
 	assert((empty($listOptions['default_sort_col']) || isset($listOptions['columns'][$listOptions['default_sort_col']])));
 	assert((!isset($listOptions['form']) || isset($listOptions['form']['href'])));
 
@@ -73,9 +79,18 @@ function createList($listOptions)
 	else
 	{
 		// First get an impression of how many items to expect.
-		if (isset($listOptions['get_count']['file']))
-			require_once($listOptions['get_count']['file']);
-		$list_context['total_num_items'] = call_user_func_array($listOptions['get_count']['function'], empty($listOptions['get_count']['params']) ? array() : $listOptions['get_count']['params']);
+		if (!empty($listOptions['get_count']['value']) && ctype_digit($listOptions['get_count']['value']))
+			$list_context['total_num_items'] = $listOptions['get_count']['value'];
+
+		else
+		{
+			if (isset($listOptions['get_count']['file']))
+				require_once($listOptions['get_count']['file']);
+
+			$call = call_helper($listOptions['get_count']['function'], true);
+			$list_context['total_num_items'] = call_user_func_array($call, empty($listOptions['get_count']['params']) ?
+				array() : array_values($listOptions['get_count']['params']));
+		}
 
 		// Default the start to the beginning...sounds logical.
 		$list_context['start'] = isset($_REQUEST[$list_context['start_var_name']]) ? (int) $_REQUEST[$list_context['start_var_name']] : 0;
@@ -103,13 +118,20 @@ function createList($listOptions)
 	$list_context['num_columns'] = count($listOptions['columns']);
 	$list_context['width'] = isset($listOptions['width']) ? $listOptions['width'] : '0';
 
-	// Get the file with the function for the item list.
-	if (isset($listOptions['get_items']['file']))
-		require_once($listOptions['get_items']['file']);
-
 	// Call the function and include which items we want and in what order.
-	$list_items = call_user_func_array($listOptions['get_items']['function'], array_merge(array($list_context['start'], $list_context['items_per_page'], $sort), empty($listOptions['get_items']['params']) ? array() : $listOptions['get_items']['params']));
-	$list_items = empty($list_items) ? array() : $list_items;
+	if (!empty($listOptions['get_items']['value']) && is_array($listOptions['get_items']['value']))
+		$list_items = $listOptions['get_items']['value'];
+
+	else
+	{
+		// Get the file with the function for the item list.
+		if (isset($listOptions['get_items']['file']))
+			require_once($listOptions['get_items']['file']);
+
+		$call = call_helper($listOptions['get_items']['function'], true);
+		$list_items = call_user_func_array($call, array_merge(array($list_context['start'], $list_context['items_per_page'], $sort), empty($listOptions['get_items']['params']) ? array() : $listOptions['get_items']['params']));
+		$list_items = empty($list_items) ? array() : $list_items;
+	}
 
 	// Loop through the list items to be shown and construct the data values.
 	$list_context['rows'] = array();
@@ -126,14 +148,14 @@ function createList($listOptions)
 
 			// Take the value from the database and make it HTML safe.
 			elseif (isset($column['data']['db_htmlsafe']))
-				$cur_data['value'] = htmlspecialchars($list_item[$column['data']['db_htmlsafe']]);
+				$cur_data['value'] = $smcFunc['htmlspecialchars']($list_item[$column['data']['db_htmlsafe']]);
 
 			// Using sprintf is probably the most readable way of injecting data.
 			elseif (isset($column['data']['sprintf']))
 			{
 				$params = array();
 				foreach ($column['data']['sprintf']['params'] as $sprintf_param => $htmlsafe)
-					$params[] = $htmlsafe ? htmlspecialchars($list_item[$sprintf_param]) : $list_item[$sprintf_param];
+					$params[] = $htmlsafe ? $smcFunc['htmlspecialchars']($list_item[$sprintf_param]) : $list_item[$sprintf_param];
 				$cur_data['value'] = vsprintf($column['data']['sprintf']['format'], $params);
 			}
 
@@ -171,15 +193,13 @@ function createList($listOptions)
 			$cur_row[$column_id] = $cur_data;
 		}
 
-		$list_context['rows'][$item_id]['class'] = '';
-		$list_context['rows'][$item_id]['style'] = '';
 		// Maybe we wat set a custom class for the row based on the data in the row itself
 		if (isset($listOptions['data_check']))
 		{
 			if (isset($listOptions['data_check']['class']))
-				$list_context['rows'][$item_id]['class'] = ' ' . $listOptions['data_check']['class']($list_item);
+				$list_context['rows'][$item_id]['class'] = $listOptions['data_check']['class']($list_item);
 			if (isset($listOptions['data_check']['style']))
-				$list_context['rows'][$item_id]['style'] = ' style="' . $listOptions['data_check']['style']($list_item) . '"';
+				$list_context['rows'][$item_id]['style'] = $listOptions['data_check']['style']($list_item);
 		}
 
 		// Insert the row into the list.
@@ -245,10 +265,6 @@ function createList($listOptions)
 	// Add an option for inline JavaScript.
 	if (isset($listOptions['javascript']))
 		$list_context['javascript'] = $listOptions['javascript'];
-
-	// We want a menu.
-	if (isset($listOptions['list_menu']))
-		$list_context['list_menu'] = $listOptions['list_menu'];
 
 	// Make sure the template is loaded.
 	loadTemplate('GenericList');

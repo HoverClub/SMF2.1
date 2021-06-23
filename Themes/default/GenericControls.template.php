@@ -3,136 +3,81 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
-// This function displays all the stuff you get with a richedit box - BBC, smileys etc.
+/**
+ * This function displays all the stuff you get with a richedit box - BBC, smileys, etc.
+ *
+ * @param string $editor_id The editor ID
+ * @param null|bool $smileyContainer If null, hides the smiley section regardless of settings
+ * @param null|bool $bbcContainer If null, hides the bbcode buttons regardless of settings
+ */
 function template_control_richedit($editor_id, $smileyContainer = null, $bbcContainer = null)
 {
-	global $context, $settings, $modSettings;
+	global $context, $settings, $modSettings, $smcFunc;
 
 	$editor_context = &$context['controls']['richedit'][$editor_id];
 
+	if ($smileyContainer === null)
+		$editor_context['sce_options']['emoticonsEnabled'] = false;
+
+	if ($bbcContainer === null)
+		$editor_context['sce_options']['toolbar'] = '';
+
 	echo '
-		<div>
-			<div>
-				<div>
-					<textarea class="editor" name="', $editor_id, '" id="', $editor_id, '" rows="" cols="600" onselect="storeCaret(this);" onclick="storeCaret(this);" onkeyup="storeCaret(this);" onchange="storeCaret(this);" tabindex="', $context['tabindex']++, '" style="width: ', $editor_context['width'], ';height: ', $editor_context['height'], '; ', isset($context['post_error']['no_message']) || isset($context['post_error']['long_message']) ? 'border: 1px solid red;' : '', '">', $editor_context['value'], '</textarea>
-				</div>
-				<div id="', $editor_id, '_resizer" class="richedit_resize"></div>
-			</div>
-		</div>
-		<input type="hidden" name="', $editor_id, '_mode" id="', $editor_id, '_mode" value="0" />
-		<script type="text/javascript"><!-- // --><![CDATA[
+		<textarea class="editor" name="', $editor_id, '" id="', $editor_id, '" cols="600" onselect="storeCaret(this);" onclick="storeCaret(this);" onkeyup="storeCaret(this);" onchange="storeCaret(this);" tabindex="', $context['tabindex']++, '" style="width: ', $editor_context['width'], '; height: ', $editor_context['height'], ';', isset($context['post_error']['no_message']) || isset($context['post_error']['long_message']) ? 'border: 1px solid red;' : '', '"', !empty($context['editor']['required']) ? ' required' : '', '>', $editor_context['value'], '</textarea>
+		<div id="', $editor_id, '_resizer" class="richedit_resize"></div>
+		<input type="hidden" name="', $editor_id, '_mode" id="', $editor_id, '_mode" value="0">
+		<script>
 			$(document).ready(function() {
 				', !empty($context['bbcodes_handlers']) ? $context['bbcodes_handlers'] : '', '
 
-				$("#', $editor_id, '").sceditorBBCodePlugin({
-					style: "', $settings['default_theme_url'], '/css/jquery.sceditor.default.css",
-					emoticonsCompat: true,',
-					!empty($editor_context['locale']) ? '
-					locale: \'' . $editor_context['locale'] . '\',' : '', '
-					colors: "black,red,yellow,pink,green,orange,purple,blue,beige,brown,teal,navy,maroon,limegreen,white"';
+				var textarea = $("#', $editor_id, '").get(0);
+				sceditor.create(textarea, ', $smcFunc['json_encode']($editor_context['sce_options'], JSON_PRETTY_PRINT), ');';
 
-		// Show the smileys.
-		if ((!empty($context['smileys']['postform']) || !empty($context['smileys']['popup'])) && !$editor_context['disable_smiley_box'] && $smileyContainer !== null)
-		{
-			echo ',
-					emoticons:
-					{';
-			$countLocations = count($context['smileys']);
-			foreach ($context['smileys'] as $location => $smileyRows)
-			{
-				$countLocations--;
-				if ($location == 'postform')
-					echo '
-						dropdown:
-						{';
-				elseif ($location == 'popup')
-					echo '
-						popup:
-						{';
-
-				$numRows = count($smileyRows);
-				// This is needed because otherwise the editor will remove all the duplicate (empty) keys and leave only 1 additional line
-				$emptyPlaceholder = 0;
-				foreach ($smileyRows as $smileyRow)
-				{
-					foreach ($smileyRow['smileys'] as $smiley)
-					{
-						echo '
-								', JavaScriptEscape($smiley['code']), ': ', JavaScriptEscape($settings['smileys_url'] . '/' . $smiley['filename']), empty($smiley['isLast']) ? ',' : '';
-					}
-					if (empty($smileyRow['isLast']) && $numRows != 1)
-						echo ',
-						\'-', $emptyPlaceholder++, '\': \'\',';
-				}
-				echo '
-						}', $countLocations != 0 ? ',' : '';
-			}
-			echo '
-					}';
-		}
-		else
-			echo ',
-					emoticons:
-					{}';
-
-		if ($context['show_bbc'] && $bbcContainer !== null)
-		{
-			echo ',
-					toolbar: "emoticon,';
-			$count_tags = count($context['bbc_tags']);
-			foreach ($context['bbc_toolbar'] as $i => $buttonRow)
-			{
-				echo implode('|', $buttonRow);
-				$count_tags--;
-				if (!empty($count_tags))
-					echo '||';
-			}
-
-			echo '",';
-		}
-		else
-			echo ',
-					toolbar: "emoticon,source",';
-
+	if ($editor_context['sce_options']['emoticonsEnabled'])
 		echo '
-				});
-				$("#', $editor_id, '").data("sceditor").createPermanentDropDown();
-				$(".sceditor-container").width("100%").height("100%");',
-				$editor_context['rich_active'] ? '' : '
-				$("#' . $editor_id . '").data("sceditor").setTextMode();', '
-				if (!(is_ie || is_ff || is_opera || is_safari || is_chrome))
-				{
-					$("#' . $editor_id . '").data("sceditor").setTextMode();
-					$(".sceditor-button-source").hide();
-				}', isset($context['post_error']['no_message']) || isset($context['post_error']['long_message']) ? '
+				sceditor.instance(textarea).createPermanentDropDown();';
+
+	if (empty($editor_context['rich_active']))
+		echo '
+				sceditor.instance(textarea).toggleSourceMode();';
+
+	if (isset($context['post_error']['no_message']) || isset($context['post_error']['long_message']))
+		echo '
 				$(".sceditor-container").find("textarea").each(function() {$(this).css({border: "1px solid red"})});
-				$(".sceditor-container").find("iframe").each(function() {$(this).css({border: "1px solid red"})});' : '', '
+				$(".sceditor-container").find("iframe").each(function() {$(this).css({border: "1px solid red"})});';
+
+	echo '
 			});';
 
-		// Now for backward compatibility let's collect few infos in the good ol' style
-		echo '
-				var oEditorHandle_', $editor_id, ' = new smc_Editor({
-					sUniqueId: ', JavaScriptEscape($editor_id), ',
-					sEditWidth: ', JavaScriptEscape($editor_context['width']), ',
-					sEditHeight: ', JavaScriptEscape($editor_context['height']), ',
-					bRichEditOff: ', empty($modSettings['disable_wysiwyg']) ? 'false' : 'true', ',
-					oSmileyBox: null,
-					oBBCBox: null
-				});
-				smf_editorArray[smf_editorArray.length] = oEditorHandle_', $editor_id, ';
-			// ]]></script>';
+	// Now for backward compatibility let's collect few infos in the good ol' style
+	echo '
+			var oEditorHandle_', $editor_id, ' = new smc_Editor({
+				sUniqueId: ', JavaScriptEscape($editor_id), ',
+				sEditWidth: ', JavaScriptEscape($editor_context['width']), ',
+				sEditHeight: ', JavaScriptEscape($editor_context['height']), ',
+				bRichEditOff: ', empty($modSettings['disable_wysiwyg']) ? 'false' : 'true', ',
+				oSmileyBox: null,
+				oBBCBox: null
+			});
+			smf_editorArray[smf_editorArray.length] = oEditorHandle_', $editor_id, ';
+		</script>';
 }
 
+/**
+ * This template shows the form buttons at the bottom of the editor
+ *
+ * @param string $editor_id The editor ID
+ */
 function template_control_richedit_buttons($editor_id)
 {
-	global $context, $settings, $options, $txt, $modSettings, $scripturl;
+	global $context, $settings, $txt, $modSettings;
 
 	$editor_context = &$context['controls']['richedit'][$editor_id];
 
@@ -140,61 +85,52 @@ function template_control_richedit_buttons($editor_id)
 		<span class="smalltext">
 			', $context['shortcuts_text'], '
 		</span>
-		<input type="submit" value="', isset($editor_context['labels']['post_button']) ? $editor_context['labels']['post_button'] : $txt['post'], '" tabindex="', $context['tabindex']++, '" onclick="return submitThisOnce(this);" accesskey="s" class="button_submit" />';
+		<span class="post_button_container">';
 
-	if ($editor_context['preview_type'])
-		echo '
-		<input type="submit" name="preview" value="', isset($editor_context['labels']['preview_button']) ? $editor_context['labels']['preview_button'] : $txt['preview'], '" tabindex="', $context['tabindex']++, '" onclick="', $editor_context['preview_type'] == 2 ? 'return event.ctrlKey || previewPost();' : 'return submitThisOnce(this);', '" accesskey="p" class="button_submit" />';
-
-	if ($context['show_spellchecking'])
-		echo '
-		<input type="button" value="', $txt['spell_check'], '" tabindex="', $context['tabindex']++, '" onclick="oEditorHandle_', $editor_id, '.spellCheckStart();" class="button_submit" />';
-
-	if (!empty($context['drafts_save']))
-	{
-		// Show the save draft button
-		echo '
-		<input type="submit" name="save_draft" value="', $txt['draft_save'], '" tabindex="', $context['tabindex']++, '" onclick="return confirm(' . JavaScriptEscape($txt['draft_save_note']) . ') && submitThisOnce(this);" accesskey="d" class="button_submit" />
-		<input type="hidden" id="id_draft" name="id_draft" value="', empty($context['id_draft']) ? 0 : $context['id_draft'], '" />';
-
-		// Start an instance of the auto saver if its enabled
-		if (!empty($context['drafts_autosave']) && !empty($options['drafts_autosave_enabled']))
-			echo '
-		<br />
-		<span class="righttext padding" style="display: block">
-			<span id="throbber" style="display:none"><img src="' . $settings['images_url'] . '/loading_sm.gif" alt="" class="centericon" />&nbsp;</span>
-			<span id="draft_lastautosave" ></span>
-		</span>
-		<script type="text/javascript" src="', $settings['default_theme_url'], '/scripts/drafts.js?alp21"></script>
-		<script type="text/javascript"><!-- // --><![CDATA[
-			var oDraftAutoSave = new smf_DraftAutoSave({
-				sSelf: \'oDraftAutoSave\',
-				sLastNote: \'draft_lastautosave\',
-				sLastID: \'id_draft\',
-				sSceditorID: \'', $editor_id, '\',
-				sType: \'post\',
-				iBoard: ', (empty($context['current_board']) ? 0 : $context['current_board']), ',
-				iFreq: ', $context['drafts_autosave_frequency'], '
-			});
-		// ]]></script>';
-	}
+	$tempTab = $context['tabindex'];
 
 	if (!empty($context['drafts_pm_save']))
-	{
-		// The PM draft save button
-		echo '
-		<input type="submit" name="save_draft" value="', $txt['draft_save'], '" tabindex="', $context['tabindex']++, '" onclick="submitThisOnce(this);" accesskey="d" class="button_submit" />
-		<input type="hidden" id="id_pm_draft" name="id_pm_draft" value="', empty($context['id_pm_draft']) ? 0 : $context['id_pm_draft'], '" />';
+		$tempTab++;
+	elseif (!empty($context['drafts_save']))
+		$tempTab++;
+	elseif ($editor_context['preview_type'])
+		$tempTab++;
+	elseif ($context['show_spellchecking'])
+		$tempTab++;
 
-		// Load in the PM autosaver if its enabled and the user wants to use it
-		if (!empty($context['drafts_autosave']) && !empty($options['drafts_autosave_enabled']))
+	$tempTab++;
+	$context['tabindex'] = $tempTab;
+
+	foreach ($context['richedit_buttons'] as $name => $button) {
+		if ($name == 'spell_check') {
+			$button['onclick'] = 'oEditorHandle_' . $editor_id . '.spellCheckStart();';
+		}
+
+		if ($name == 'preview') {
+			$button['value'] = isset($editor_context['labels']['preview_button']) ? $editor_context['labels']['preview_button'] : $button['value'];
+			$button['onclick'] = $editor_context['preview_type'] == 2 ? '' : 'return submitThisOnce(this);';
+			$button['show'] = $editor_context['preview_type'];
+		}
+
+		if ($button['show']) {
 			echo '
+		<input type="', $button['type'], '"', $button['type'] == 'hidden' ? ' id="' . $name . '"' : '', ' name="', $name, '" value="', $button['value'], '"', $button['type'] != 'hidden' ? ' tabindex="' . --$tempTab . '"' : '', !empty($button['onclick']) ? ' onclick="' . $button['onclick'] . '"' : '', !empty($button['accessKey']) ? ' accesskey="' . $button['accessKey'] . '"' : '', $button['type'] != 'hidden' ? ' class="button"' : '', '>';
+		}
+	}
+
+	echo '
+		<input type="submit" value="', isset($editor_context['labels']['post_button']) ? $editor_context['labels']['post_button'] : $txt['post'], '" name="post" tabindex="', --$tempTab, '" onclick="return submitThisOnce(this);" accesskey="s" class="button">
+		</span>';
+
+	// Load in the PM autosaver if it's enabled
+	if (!empty($context['drafts_pm_save']) && !empty($context['drafts_autosave']))
+		echo '
 		<span class="righttext padding" style="display: block">
-			<span id="throbber" style="display:none"><img src="' . $settings['images_url'] . '/loading_sm.gif" alt="" class="centericon" />&nbsp;</span>
+			<span id="throbber" style="display:none"><img src="' . $settings['images_url'] . '/loading_sm.gif" alt="" class="centericon"></span>
 			<span id="draft_lastautosave" ></span>
 		</span>
-		<script type="text/javascript" src="', $settings['default_theme_url'], '/scripts/drafts.js?alp21"></script>
-		<script type="text/javascript"><!-- // --><![CDATA[
+		<script src="', $settings['default_theme_url'], '/scripts/drafts.js', $context['browser_cache'], '"></script>
+		<script>
 			var oDraftAutoSave = new smf_DraftAutoSave({
 				sSelf: \'oDraftAutoSave\',
 				sLastNote: \'draft_lastautosave\',
@@ -205,14 +141,40 @@ function template_control_richedit_buttons($editor_id)
 				iBoard: 0,
 				iFreq: ', (empty($modSettings['drafts_autosave_frequency']) ? 60000 : $modSettings['drafts_autosave_frequency'] * 1000), '
 			});
-		// ]]></script>';
-	}
+		</script>';
+
+	// Start an instance of the auto saver if its enabled
+	if (!empty($context['drafts_save']) && !empty($context['drafts_autosave']))
+		echo '
+		<span class="righttext padding" style="display: block">
+			<span id="throbber" style="display:none"><img src="', $settings['images_url'], '/loading_sm.gif" alt="" class="centericon"></span>
+			<span id="draft_lastautosave" ></span>
+		</span>
+		<script src="', $settings['default_theme_url'], '/scripts/drafts.js', $context['browser_cache'], '"></script>
+		<script>
+			var oDraftAutoSave = new smf_DraftAutoSave({
+				sSelf: \'oDraftAutoSave\',
+				sLastNote: \'draft_lastautosave\',
+				sLastID: \'id_draft\',
+				sSceditorID: \'', $editor_id, '\',
+				sType: \'post\',
+				iBoard: ', (empty($context['current_board']) ? 0 : $context['current_board']), ',
+				iFreq: ', $context['drafts_autosave_frequency'], '
+			});
+		</script>';
 }
 
-// What's this, verification?!
+/**
+ * This template displays a verification form
+ *
+ * @param int|string $verify_id The verification control ID
+ * @param string $display_type What type to display. Can be 'single' to only show one verification option or 'all' to show all of them
+ * @param bool $reset Whether to reset the internal tracking counter
+ * @return bool False if there's nothing else to show, true if $display_type is 'single', nothing otherwise
+ */
 function template_control_verification($verify_id, $display_type = 'all', $reset = false)
 {
-	global $context, $settings, $options, $txt, $modSettings;
+	global $context, $txt;
 
 	$verify_context = &$context['controls']['verification'][$verify_id];
 
@@ -221,7 +183,7 @@ function template_control_verification($verify_id, $display_type = 'all', $reset
 		$verify_context['tracking'] = 0;
 
 	// How many items are there to display in total.
-	$total_items = count($verify_context['questions']) + ($verify_context['show_visual'] ? 1 : 0);
+	$total_items = count($verify_context['questions']) + ($verify_context['show_visual'] || $verify_context['can_recaptcha'] ? 1 : 0);
 
 	// If we've gone too far, stop.
 	if ($verify_context['tracking'] > $total_items)
@@ -243,58 +205,66 @@ function template_control_verification($verify_id, $display_type = 'all', $reset
 			echo '
 				<div class="smalltext vv_special">
 					', $txt['visual_verification_hidden'], ':
-					<input type="text" name="', $_SESSION[$verify_id . '_vv']['empty_field'], '" autocomplete="off" size="30" value="" />
-				</div>
-				<br />';
+					<input type="text" name="', $_SESSION[$verify_id . '_vv']['empty_field'], '" autocomplete="off" size="30" value="">
+				</div>';
 
-		// Do the actual stuff - image first?
-		if ($i == 0 && $verify_context['show_visual'])
+		// Do the actual stuff
+		if ($i == 0 && ($verify_context['show_visual'] || $verify_context['can_recaptcha']))
 		{
-			if ($context['use_graphic_library'])
-				echo '
-				<img src="', $verify_context['image_href'], '" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '" />';
-			else
-				echo '
-				<img src="', $verify_context['image_href'], ';letter=1" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '_1" />
-				<img src="', $verify_context['image_href'], ';letter=2" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '_2" />
-				<img src="', $verify_context['image_href'], ';letter=3" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '_3" />
-				<img src="', $verify_context['image_href'], ';letter=4" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '_4" />
-				<img src="', $verify_context['image_href'], ';letter=5" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '_5" />
-				<img src="', $verify_context['image_href'], ';letter=6" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '_6" />';
+			if ($verify_context['show_visual'])
+			{
+				if ($context['use_graphic_library'])
+					echo '
+				<img src="', $verify_context['image_href'], '" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '">';
+				else
+					echo '
+				<img src="', $verify_context['image_href'], ';letter=1" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '_1">
+				<img src="', $verify_context['image_href'], ';letter=2" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '_2">
+				<img src="', $verify_context['image_href'], ';letter=3" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '_3">
+				<img src="', $verify_context['image_href'], ';letter=4" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '_4">
+				<img src="', $verify_context['image_href'], ';letter=5" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '_5">
+				<img src="', $verify_context['image_href'], ';letter=6" alt="', $txt['visual_verification_description'], '" id="verification_image_', $verify_id, '_6">';
 
-			if (WIRELESS)
-				echo '<br />
-				<input type="text" name="', $verify_id, '_vv[code]" value="', !empty($verify_context['text_value']) ? $verify_context['text_value'] : '', '" size="30" tabindex="', $context['tabindex']++, '" class="input_text" />';
-			else
 				echo '
 				<div class="smalltext" style="margin: 4px 0 8px 0;">
-					<a href="', $verify_context['image_href'], ';sound" id="visual_verification_', $verify_id, '_sound" rel="nofollow">', $txt['visual_verification_sound'], '</a> / <a href="#visual_verification_', $verify_id, '_refresh" id="visual_verification_', $verify_id, '_refresh">', $txt['visual_verification_request_new'], '</a>', $display_type != 'quick_reply' ? '<br />' : '', '<br />
-					', $txt['visual_verification_description'], ':', $display_type != 'quick_reply' ? '<br />' : '', '
-					<input type="text" name="', $verify_id, '_vv[code]" value="', !empty($verify_context['text_value']) ? $verify_context['text_value'] : '', '" size="30" tabindex="', $context['tabindex']++, '" class="input_text" />
+					<a href="', $verify_context['image_href'], ';sound" id="visual_verification_', $verify_id, '_sound" rel="nofollow">', $txt['visual_verification_sound'], '</a> / <a href="#visual_verification_', $verify_id, '_refresh" id="visual_verification_', $verify_id, '_refresh">', $txt['visual_verification_request_new'], '</a>', $display_type != 'quick_reply' ? '<br>' : '', '<br>
+					', $txt['visual_verification_description'], ':', $display_type != 'quick_reply' ? '<br>' : '', '
+					<input type="text" name="', $verify_id, '_vv[code]" value="" size="30" tabindex="', $context['tabindex']++, '" autocomplete="off" required>
 				</div>';
+			}
+
+			if ($verify_context['can_recaptcha'])
+			{
+				$lang = (isset($txt['lang_recaptcha']) ? $txt['lang_recaptcha'] : $txt['lang_dictionary']);
+				echo '
+				<div class="g-recaptcha centertext" data-sitekey="' . $verify_context['recaptcha_site_key'] . '" data-theme="' . $verify_context['recaptcha_theme'] . '"></div>
+				<br>
+				<script type="text/javascript" src="https://www.google.com/recaptcha/api.js?hl=' . $lang . '"></script>';
+			}
 		}
 		else
 		{
 			// Where in the question array is this question?
-			$qIndex = $verify_context['show_visual'] ? $i - 1 : $i;
+			$qIndex = $verify_context['show_visual'] || $verify_context['can_recaptcha'] ? $i - 1 : $i;
 
-			echo '
+			if (isset($verify_context['questions'][$qIndex]))
+				echo '
 				<div class="smalltext">
-					', $verify_context['questions'][$qIndex]['q'], ':<br />
-					<input type="text" name="', $verify_id, '_vv[q][', $verify_context['questions'][$qIndex]['id'], ']" size="30" value="', $verify_context['questions'][$qIndex]['a'], '" ', $verify_context['questions'][$qIndex]['is_error'] ? 'style="border: 1px red solid;"' : '', ' tabindex="', $context['tabindex']++, '" class="input_text" />
+					', $verify_context['questions'][$qIndex]['q'], ':<br>
+					<input type="text" name="', $verify_id, '_vv[q][', $verify_context['questions'][$qIndex]['id'], ']" size="30" value="', $verify_context['questions'][$qIndex]['a'], '" ', $verify_context['questions'][$qIndex]['is_error'] ? 'style="border: 1px red solid;"' : '', ' tabindex="', $context['tabindex']++, '" required>
 				</div>';
 		}
 
 		if ($display_type != 'single')
 			echo '
-			</div>';
+			</div><!-- #verification_control_[i] -->';
 
 		// If we were displaying just one and we did it, break.
 		if ($display_type == 'single' && $verify_context['tracking'] == $i)
 			break;
 	}
 
-	// Assume we found something, always,
+	// Assume we found something, always.
 	$verify_context['tracking']++;
 
 	// Tell something displaying piecemeal to keep going.

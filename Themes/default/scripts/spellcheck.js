@@ -18,7 +18,8 @@ function spellCheck(formName, fieldName)
 	var aWordCharacters = ['-', '\''];
 
 	var aWords = new Array(), aResult = new Array();
-	var sText = $('#' + fieldName).data("sceditor").getTextareaValue(false);
+	var e = $('#' + fieldName).get(0);
+	var sText = sceditor.instance(e).getText(false);
 	var bInCode = false;
 	var iOffset1, iOffset2;
 
@@ -185,7 +186,7 @@ function highlightWord()
 	divptr = document.getElementById("spellview");
 
 	newValue = htmlspecialchars(strstart) + '<span class="highlight" id="h1">' + misps[wordindex].word + '</span>' + htmlspecialchars(strend);
-	setInnerHTML(divptr, newValue.replace(/_\|_/g, '<br />'));
+	setInnerHTML(divptr, newValue.replace(/_\|_/g, '<br>'));
 
 	// We could use scrollIntoView, but it's just not that great anyway.
 	var spellview_height = typeof(document.getElementById("spellview").currentStyle) != "undefined" ? parseInt(document.getElementById("spellview").currentStyle.height) : document.getElementById("spellview").offsetHeight;
@@ -220,7 +221,7 @@ function nextWord(ignoreall)
 	{
 		var divptr;
 		divptr = document.getElementById("spellview");
-		setInnerHTML(divptr, htmlspecialchars(mispstr).replace(/_\|_/g, "<br />"));
+		setInnerHTML(divptr, htmlspecialchars(mispstr).replace(/_\|_/g, "<br>"));
 
 		while (document.forms.spellingForm.suggestions.options.length > 0)
 			document.forms.spellingForm.suggestions.options[0] = null;
@@ -281,7 +282,7 @@ function htmlspecialchars(thetext)
 {
 	thetext = thetext.replace(/\</g, "&lt;");
 	thetext = thetext.replace(/\>/g, "&gt;");
-	thetext = thetext.replace(/\n/g, "<br />");
+	thetext = thetext.replace(/\n/g, "<br>");
 	thetext = thetext.replace(/\ \ /g, " &nbsp;");
 
 	return thetext;
@@ -294,11 +295,13 @@ function openSpellWin(width, height)
 
 function spellCheckGetText(editorID)
 {
-	return $("#" + editorID).data("sceditor").getTextareaValue(false);
+	var e = $('#' + editorID).get(0);
+	return sceditor.instance(e).getText(false);
 }
 function spellCheckSetText(text, editorID)
 {
-	$("#" + editorID).data("sceditor").InsertText(text, true);
-	if (!$("#" + editorID).data("sceditor").wasSource)
-		$("#" + editorID).data("sceditor").toggleTextMode();
+	var e = $("#" + editorID).get(0);
+	sceditor.instance(e).InsertText(text, true);
+	if (!sceditor.instance(e).wasSource)
+		sceditor.instance(e).toggleTextMode();
 }

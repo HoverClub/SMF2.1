@@ -1,6 +1,5 @@
-$(document).ready(function() {
-	// menu drop downs
-	$('ul.dropmenu, ul.quickbuttons').superfish({delay : 600, speed: 200, sensitivity : 8, interval : 50, timeout : 1});
+$(function() {
+	$('ul.dropmenu, ul.quickbuttons').superfish({delay : 250, speed: 100, sensitivity : 8, interval : 50, timeout : 1});
 
 	// tooltips
 	$('.preview').SMFtooltip();
@@ -16,7 +15,7 @@ function smf_codeBoxFix()
 	$.each(codeFix, function(index, tag)
 	{
 		if (is_webkit && $(tag).height() < 20)
-			$(tag).css({height: ($(tag).height + 20) + 'px'});
+			$(tag).css({height: ($(tag).height() + 20) + 'px'});
 
 		else if (is_ff && ($(tag)[0].scrollWidth > $(tag).innerWidth() || $(tag).innerWidth() == 0))
 			$(tag).css({overflow: 'scroll'});
@@ -39,19 +38,12 @@ if (is_ie || is_webkit || is_ff)
 // Toggles the element height and width styles of an image.
 function smc_toggleImageDimensions()
 {
-	var images = $('img.bbc_img');
-
-	$.each(images, function(key, img)
+	$('.postarea .bbc_img.resized').each(function(index, item)
 	{
-		if ($(img).hasClass('resized'))
+		$(item).click(function(e)
 		{
-			$(img).css({cursor: 'pointer'});
-			$(img).on('click', function()
-			{
-				var size = $(this)[0].style.width == 'auto' ? '' : 'auto';
-				$(this).css({width: size, height: size});
-			});
-		}
+			$(item).toggleClass('original_size');
+		});
 	});
 }
 
@@ -60,11 +52,9 @@ addLoadEvent(smc_toggleImageDimensions);
 
 function smf_addButton(stripId, image, options)
 {
-	$('#' + stripId + ' ul').append(
-		'<li' + ('sId' in options ? ' id="' + options.sId + '"' : '') + '>' +
-			'<a href="' + options.sUrl + '"' + ('sCustom' in options ? options.sCustom : '') + '>' +
-				'<span class="last"' + ('sId' in options ? ' id="' + options.sId + '_text"' : '') + '>' + options.sText + '</span>' +
-			'</a>' +
-		'</li>'
+	$('#' + stripId).append(
+		'<a href="' + options.sUrl + '" class="button last" ' + ('sCustom' in options ? options.sCustom : '') + ' ' + ('sId' in options ? ' id="' + options.sId + '_text"' : '') + '>'
+			+ options.sText +
+		'</a>'
 	);
 }

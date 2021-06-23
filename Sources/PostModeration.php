@@ -6,11 +6,11 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
 
 if (!defined('SMF'))
@@ -23,7 +23,7 @@ function PostModerationMain()
 {
 	global $sourcedir;
 
-	 // @todo We'll shift these later bud.
+	// @todo We'll shift these later bud.
 	loadLanguage('ModerationCenter');
 	loadTemplate('ModerationCenter');
 
@@ -31,7 +31,7 @@ function PostModerationMain()
 	require_once($sourcedir . '/ModerationCenter.php');
 
 	// Allowed sub-actions, you know the drill by now!
-	$subactions = array(
+	$subActions = array(
 		'approve' => 'ApproveMessage',
 		'attachments' => 'UnapprovedAttachments',
 		'replies' => 'UnapprovedPosts',
@@ -39,10 +39,12 @@ function PostModerationMain()
 	);
 
 	// Pick something valid...
-	if (!isset($_REQUEST['sa']) || !isset($subactions[$_REQUEST['sa']]))
+	if (!isset($_REQUEST['sa']) || !isset($subActions[$_REQUEST['sa']]))
 		$_REQUEST['sa'] = 'replies';
 
-	$subactions[$_REQUEST['sa']]();
+	call_integration_hook('integrate_post_moderation', array(&$subActions));
+
+	call_helper($subActions[$_REQUEST['sa']]);
 }
 
 /**
@@ -75,17 +77,18 @@ function UnapprovedPosts()
 		$approve_query = ' AND 1=0';
 
 	// We also need to know where we can delete topics and/or replies to.
+	$boards_can = boardsAllowedTo(array('remove_any', 'remove_own', 'delete_own', 'delete_any', 'delete_own_replies'), true, false);
 	if ($context['current_view'] == 'topics')
 	{
-		$delete_own_boards = boardsAllowedTo('remove_own');
-		$delete_any_boards = boardsAllowedTo('remove_any');
+		$delete_own_boards = $boards_can['remove_own'];
+		$delete_any_boards = $boards_can['remove_any'];
 		$delete_own_replies = array();
 	}
 	else
 	{
-		$delete_own_boards = boardsAllowedTo('delete_own');
-		$delete_any_boards = boardsAllowedTo('delete_any');
-		$delete_own_replies = boardsAllowedTo('delete_own_replies');
+		$delete_own_boards = $boards_can['delete_own'];
+		$delete_any_boards = $boards_can['delete_any'];
+		$delete_own_replies = $boards_can['delete_own_replies'];
 	}
 
 	$toAction = array();
@@ -119,10 +122,9 @@ function UnapprovedPosts()
 			SELECT m.id_msg, m.id_member, m.id_board, m.subject, t.id_topic, t.id_first_msg, t.id_member_started
 			FROM {db_prefix}messages AS m
 				INNER JOIN {db_prefix}topics AS t ON (t.id_topic = m.id_topic)
-			LEFT JOIN {db_prefix}boards AS b ON (t.id_board = b.id_board)
 			WHERE m.id_msg IN ({array_int:message_list})
 				AND m.approved = {int:not_approved}
-				AND {query_see_board}',
+				AND {query_see_message_board}',
 			array(
 				'message_list' => $toAction,
 				'not_approved' => 0,
@@ -174,11 +176,11 @@ function UnapprovedPosts()
 		{
 			if ($curAction == 'approve')
 			{
-				approveMessages ($toAction, $details, $context['current_view']);
+				approveMessages($toAction, $details, $context['current_view']);
 			}
 			else
 			{
-				removeMessages ($toAction, $details, $context['current_view']);
+				removeMessages($toAction, $details, $context['current_view']);
 			}
 		}
 	}
@@ -201,11 +203,10 @@ function UnapprovedPosts()
 
 	// What about topics?  Normally we'd use the table alias t for topics but lets use m so we don't have to redo our approve query.
 	$request = $smcFunc['db_query']('', '
-		SELECT COUNT(m.id_topic)
+		SELECT COUNT(*)
 		FROM {db_prefix}topics AS m
-			INNER JOIN {db_prefix}boards AS b ON (b.id_board = m.id_board)
 		WHERE m.approved = {int:not_approved}
-			AND {query_see_board}
+			AND {query_see_message_board}
 			' . $approve_query,
 		array(
 			'not_approved' => 0,
@@ -241,7 +242,7 @@ function UnapprovedPosts()
 	// Get all unapproved posts.
 	$request = $smcFunc['db_query']('', '
 		SELECT m.id_msg, m.id_topic, m.id_board, m.subject, m.body, m.id_member,
-			IFNULL(mem.real_name, m.poster_name) AS poster_name, m.poster_time, m.smileys_enabled,
+			COALESCE(mem.real_name, m.poster_name) AS poster_name, m.poster_time, m.smileys_enabled,
 			t.id_member_started, t.id_first_msg, b.name AS board_name, c.id_cat, c.name AS cat_name
 		FROM {db_prefix}messages AS m
 			INNER JOIN {db_prefix}topics AS t ON (t.id_topic = m.id_topic)
@@ -276,7 +277,6 @@ function UnapprovedPosts()
 
 		$context['unapproved_items'][] = array(
 			'id' => $row['id_msg'],
-			'alternate' => $i % 2,
 			'counter' => $context['start'] + $i,
 			'href' => $scripturl . '?topic=' . $row['id_topic'] . '.msg' . $row['id_msg'] . '#msg' . $row['id_msg'],
 			'link' => '<a href="' . $scripturl . '?topic=' . $row['id_topic'] . '.msg' . $row['id_msg'] . '#msg' . $row['id_msg'] . '">' . $row['subject'] . '</a>',
@@ -315,7 +315,7 @@ function UnapprovedPosts()
  */
 function UnapprovedAttachments()
 {
-	global $txt, $scripturl, $context, $user_info, $sourcedir, $smcFunc, $modSettings;
+	global $txt, $scripturl, $context, $sourcedir, $smcFunc, $modSettings;
 
 	$context['page_title'] = $txt['mc_unapproved_attachments'];
 
@@ -358,11 +358,10 @@ function UnapprovedAttachments()
 			SELECT a.id_attach
 			FROM {db_prefix}attachments AS a
 				INNER JOIN {db_prefix}messages AS m ON (m.id_msg = a.id_msg)
-				LEFT JOIN {db_prefix}boards AS b ON (m.id_board = b.id_board)
 			WHERE a.id_attach IN ({array_int:attachments})
 				AND a.approved = {int:not_approved}
 				AND a.attachment_type = {int:attachment_type}
-				AND {query_see_board}
+				AND {query_see_message_board}
 				' . $approve_query,
 			array(
 				'attachments' => $attachments,
@@ -390,7 +389,7 @@ function UnapprovedAttachments()
 	$listOptions = array(
 		'id' => 'mc_unapproved_attach',
 		'width' => '100%',
-		'items_per_page' => $modSettings['defaultMaxMessages'],
+		'items_per_page' => $modSettings['defaultMaxListItems'],
 		'no_items_label' => $txt['mc_unapproved_attachments_none_found'],
 		'base_href' => $scripturl . '?action=moderate;area=attachmod;sa=attachments',
 		'default_sort_col' => 'attach_name',
@@ -436,9 +435,10 @@ function UnapprovedAttachments()
 					'value' => $txt['mc_unapproved_attach_poster'],
 				),
 				'data' => array(
-					'function' => create_function('$data', '
-						return $data[\'poster\'][\'link\'];'
-					)
+					'function' => function($data)
+					{
+						return $data['poster']['link'];
+					},
 				),
 				'sort' => array(
 					'default' => 'm.id_member',
@@ -465,9 +465,10 @@ function UnapprovedAttachments()
 					'value' => $txt['post'],
 				),
 				'data' => array(
-					'function' => create_function('$data', '
-						return \'<a href="\' . $data[\'message\'][\'href\'] . \'">\' . shorten_subject($data[\'message\'][\'subject\'], 20) . \'</a>\';'
-					),
+					'function' => function($data)
+					{
+						return '<a href="' . $data['message']['href'] . '">' . shorten_subject($data['message']['subject'], 20) . '</a>';
+					},
 					'class' => 'smalltext',
 					'style' => 'width:15em;',
 				),
@@ -478,13 +479,13 @@ function UnapprovedAttachments()
 			),
 			'action' => array(
 				'header' => array(
-					'value' => '<input type="checkbox" class="input_check" onclick="invertAll(this, this.form);" checked="checked" />',
+					'value' => '<input type="checkbox" onclick="invertAll(this, this.form);" checked>',
 					'style' => 'width: 4%;',
 					'class' => 'centercol',
 				),
 				'data' => array(
 					'sprintf' => array(
-						'format' => '<input type="checkbox" name="item[]" value="%1$d" checked="checked" class="input_check" />',
+						'format' => '<input type="checkbox" name="item[]" value="%1$d" checked>',
 						'params' => array(
 							'id' => false,
 						),
@@ -508,12 +509,12 @@ function UnapprovedAttachments()
 				'value' => '
 					<select name="do" onchange="if (this.value != 0 &amp;&amp; confirm(\'' . $txt['mc_unapproved_sure'] . '\')) submit();">
 						<option value="0">' . $txt['with_selected'] . ':</option>
-						<option value="0">-------------------</option>
+						<option value="0" disabled>-------------------</option>
 						<option value="approve">&nbsp;--&nbsp;' . $txt['approve'] . '</option>
 						<option value="delete">&nbsp;--&nbsp;' . $txt['delete'] . '</option>
 					</select>
-					<noscript><input type="submit" name="ml_go" value="' . $txt['go'] . '" class="button_submit" /></noscript>',
-				'align' => 'right',
+					<noscript><input type="submit" name="ml_go" value="' . $txt['go'] . '" class="button"></noscript>',
+				'class' => 'floatright',
 			),
 		),
 	);
@@ -536,11 +537,11 @@ function UnapprovedAttachments()
  * Callback function for UnapprovedAttachments
  * retrieve all the attachments waiting for approval the approver can approve
  *
- * @param int $start
- * @param int $items_per_page
- * @param string $sort
- * @param string $approve_query additional restrictions based on the boards the approver can see
- * @return array, an array of unapproved attachments
+ * @param int $start The item to start with (for pagination purposes)
+ * @param int $items_per_page How many items to show on each page
+ * @param string $sort A string indicating how to sort the results
+ * @param string $approve_query Additional restrictions based on the boards the approver can see
+ * @return array An array of information about the unapproved attachments
  */
 function list_getUnapprovedAttachments($start, $items_per_page, $sort, $approve_query)
 {
@@ -549,7 +550,7 @@ function list_getUnapprovedAttachments($start, $items_per_page, $sort, $approve_
 	// Get all unapproved attachments.
 	$request = $smcFunc['db_query']('', '
 		SELECT a.id_attach, a.filename, a.size, m.id_msg, m.id_topic, m.id_board, m.subject, m.body, m.id_member,
-			IFNULL(mem.real_name, m.poster_name) AS poster_name, m.poster_time,
+			COALESCE(mem.real_name, m.poster_name) AS poster_name, m.poster_time,
 			t.id_member_started, t.id_first_msg, b.name AS board_name, c.id_cat, c.name AS cat_name
 		FROM {db_prefix}attachments AS a
 			INNER JOIN {db_prefix}messages AS m ON (m.id_msg = a.id_msg)
@@ -616,8 +617,8 @@ function list_getUnapprovedAttachments($start, $items_per_page, $sort, $approve_
  * Callback function for UnapprovedAttachments
  * count all the attachments waiting for approval that this approver can approve
  *
- * @param string $approve_query additional restrictions based on the boards the approver can see
- * @return int the number of unapproved attachments
+ * @param string $approve_query Additional restrictions based on the boards the approver can see
+ * @return int The number of unapproved attachments
  */
 function list_getNumUnapprovedAttachments($approve_query)
 {
@@ -628,10 +629,9 @@ function list_getNumUnapprovedAttachments($approve_query)
 		SELECT COUNT(*)
 		FROM {db_prefix}attachments AS a
 			INNER JOIN {db_prefix}messages AS m ON (m.id_msg = a.id_msg)
-			INNER JOIN {db_prefix}boards AS b ON (b.id_board = m.id_board)
 		WHERE a.approved = {int:not_approved}
 			AND a.attachment_type = {int:attachment_type}
-			AND {query_see_board}
+			AND {query_see_message_board}
 			' . $approve_query,
 		array(
 			'not_approved' => 0,
@@ -690,15 +690,15 @@ function ApproveMessage()
 			logAction(($approved ? 'un' : '') . 'approve', array('topic' => $topic, 'subject' => $subject, 'member' => $poster, 'board' => $board));
 	}
 
-	redirectexit('topic=' . $topic . '.msg' . $_REQUEST['msg']. '#msg' . $_REQUEST['msg']);
+	redirectexit('topic=' . $topic . '.msg' . $_REQUEST['msg'] . '#msg' . $_REQUEST['msg']);
 }
 
 /**
  * Approve a batch of posts (or topics in their own right)
  *
- * @param array $messages
- * @param array $messageDetails
- * @param (string) $current_view = replies
+ * @param array $messages The IDs of the messages to approve
+ * @param array $messageDetails An array of information about each message, for the log
+ * @param string $current_view What type of unapproved items we're approving - can be 'topics' or 'replies'
  */
 function approveMessages($messages, $messageDetails, $current_view = 'replies')
 {
@@ -776,9 +776,9 @@ function approveAllData()
 /**
  * Remove a batch of messages (or topics)
  *
- * @param array $messages
- * @param array $messageDetails
- * @param string $current_view = replies
+ * @param array $messages The IDs of the messages to remove
+ * @param array $messageDetails An array of information about the messages for the log
+ * @param string $current_view What type of item we're removing - can be 'topics' or 'replies'
  */
 function removeMessages($messages, $messageDetails, $current_view = 'replies')
 {
@@ -806,4 +806,5 @@ function removeMessages($messages, $messageDetails, $current_view = 'replies')
 		}
 	}
 }
+
 ?>

@@ -7,12 +7,15 @@
  * Simple Machines Forum (SMF)
  *
  * @package SMF
- * @author Simple Machines http://www.simplemachines.org
- * @copyright 2013 Simple Machines and individual contributors
- * @license http://www.simplemachines.org/about/smf/license.php BSD
+ * @author Simple Machines https://www.simplemachines.org
+ * @copyright 2021 Simple Machines and individual contributors
+ * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 Alpha 1
+ * @version 2.1 RC3
  */
+
+// Set this to true to always log $_POST info received from payment gateways.
+$paid_debug = false;
 
 // Start things rolling by getting SMF alive...
 $ssi_guest_access = true;
@@ -30,7 +33,7 @@ loadLanguage('ManagePaid');
 // If there's literally nothing coming in, let's take flight!
 if (empty($_POST))
 {
-	header('Content-Type: text/html; charset=' . (empty($modSettings['global_character_set']) ? (empty($txt['lang_character_set']) ? 'ISO-8859-1' : $txt['lang_character_set']) : $modSettings['global_character_set']));
+	header('content-type: text/html; charset=' . (empty($modSettings['global_character_set']) ? (empty($txt['lang_character_set']) ? 'ISO-8859-1' : $txt['lang_character_set']) : $modSettings['global_character_set']));
 	die($txt['paid_no_data']);
 }
 
@@ -68,7 +71,7 @@ foreach ($gatewayHandles as $gateway)
 if (empty($txnType))
 	generateSubscriptionError($txt['paid_unknown_transaction_type']);
 
-// Get the subscription and member ID amoungst others...
+// Get the subscription and member ID, amongst others...
 @list($subscription_id, $member_id) = $gatewayClass->precheck();
 
 // Integer these just in case.
@@ -180,14 +183,14 @@ if ($gatewayClass->isRefund())
 // Otherwise is it what we want, a purchase?
 elseif ($gatewayClass->isPayment() || $gatewayClass->isSubscription())
 {
-	$cost = unserialize($subscription_info['cost']);
+	$cost = $smcFunc['json_decode']($subscription_info['cost'], true);
 	$total_cost = $gatewayClass->getCost();
 	$notify = false;
 
 	// For one off's we want to only capture them once!
 	if (!$gatewayClass->isSubscription())
 	{
-		$real_details = @unserialize($subscription_info['pending_details']);
+		$real_details = $smcFunc['json_decode']($subscription_info['pending_details'], true);
 		if (empty($real_details))
 			generateSubscriptionError(sprintf($txt['paid_count_not_find_outstanding_payment'], $member_id, $subscription_id));
 
@@ -201,7 +204,7 @@ elseif ($gatewayClass->isPayment() || $gatewayClass->isSubscription())
 			break;
 		}
 
-		$subscription_info['pending_details'] = empty($real_details) ? '' : serialize($real_details);
+		$subscription_info['pending_details'] = empty($real_details) ? '' : $smcFunc['json_encode']($real_details);
 
 		$smcFunc['db_query']('', '
 			UPDATE {db_prefix}log_subscribed
@@ -265,15 +268,15 @@ elseif ($gatewayClass->isPayment() || $gatewayClass->isSubscription())
 		emailAdmins('paid_subscription_new', $replacements, $notify_users);
 	}
 }
+// Maybe they're cancelling. Some subscriptions may require actively doing something, but PayPal doesn't, for example.
+elseif ($gatewayClass->isCancellation())
+{
+	if (method_exists($gatewayClass, 'performCancel'))
+		$gatewayClass->performCancel($subscription_id, $member_id, $subscription_info);
+}
 else
 {
 	// Some other "valid" transaction such as:
-	//
-	// subscr_cancel: This IPN response (txn_type) is sent only when the subscriber cancels his/her
-	// current subscription or the merchant cancels the subscribers subscription. In this event according
-	// to Paypal rules the subscr_eot (End of Term) IPN response is NEVER sent, and it is up to you to
-	// keep the subscription of the subscriber active for remaining days of subscription should they cancel
-	// their subscription in the middle of the subscription period.
 	//
 	// subscr_signup: This IPN response (txn_type) is sent only the first time the user signs up for a subscription.
 	// It then does not fire in any event later. This response is received somewhere before or after the first payment of
@@ -285,17 +288,23 @@ else
 // In case we have anything specific to do.
 $gatewayClass->close();
 
+// Hidden setting to log the IPN info for debugging purposes.
+if ($paid_debug === true)
+	generateSubscriptionError($txt['subscription'], true);
+
 /**
  * Log an error then exit
  *
- * @param string $text
+ * @param string $text The error to log
+ * @param bool $debug If true, won't send an email if $modSettings['paid_email'] isn't set
+ * @return void
  */
-function generateSubscriptionError($text)
+function generateSubscriptionError($text, $debug = false)
 {
 	global $modSettings, $notify_users, $smcFunc;
 
 	// Send an email?
-	if (!empty($modSettings['paid_email']))
+	if (!empty($modSettings['paid_email']) && !$debug)
 	{
 		$replacements = array(
 			'ERROR' => $text,
@@ -308,11 +317,11 @@ function generateSubscriptionError($text)
 	if (!empty($_POST))
 	{
 		foreach ($_POST as $key => $val)
-			$text .= '<br />' . $smcFunc['htmlspecialchars']($key) . ': ' . $smcFunc['htmlspecialchars']($val);
+			$text .= '<br>' . $smcFunc['htmlspecialchars']($key) . ': ' . $smcFunc['htmlspecialchars']($val);
 	}
 
 	// Then just log and die.
-	log_error($text);
+	log_error($text, 'paidsubs');
 
 	exit;
 }
