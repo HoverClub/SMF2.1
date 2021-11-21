@@ -10,7 +10,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -123,8 +123,8 @@ function SetCensor()
 
 		// Set the new arrays and settings in the database.
 		$updates = array(
-			'censor_vulgar' => implode("\n", $censored_vulgar),
-			'censor_proper' => implode("\n", $censored_proper),
+			'censor_vulgar' => $smcFunc['normalize'](implode("\n", $censored_vulgar)),
+			'censor_proper' => $smcFunc['normalize'](implode("\n", $censored_proper)),
 			'allow_no_censored' => empty($_POST['allow_no_censored']) ? '0' : '1',
 			'censorWholeWord' => empty($_POST['censorWholeWord']) ? '0' : '1',
 			'censorIgnoreCase' => empty($_POST['censorIgnoreCase']) ? '0' : '1',

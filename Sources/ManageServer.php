@@ -56,7 +56,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 use SMF\Cache\CacheApi;
@@ -150,7 +150,7 @@ function ModifySettings()
  */
 function ModifyGeneralSettings($return_config = false)
 {
-	global $scripturl, $context, $txt, $modSettings, $boardurl, $sourcedir;
+	global $scripturl, $context, $txt, $modSettings, $boardurl, $sourcedir, $smcFunc;
 
 	// If no cert, force_ssl must remain 0
 	require_once($sourcedir . '/Subs.php');
@@ -197,6 +197,12 @@ function ModifyGeneralSettings($return_config = false)
 	if (isset($_REQUEST['save']))
 	{
 		call_integration_hook('integrate_save_general_settings');
+
+		foreach ($config_vars as $config_var)
+		{
+			if (is_array($config_var) && isset($config_var[3]) && $config_var[3] == 'text' && !empty($_POST[$config_var[0]]))
+				$_POST[$config_var[0]] = $smcFunc['normalize']($_POST[$config_var[0]]);
+		}
 
 		// Are we saving the stat collection?
 		if (!empty($_POST['enable_sm_stats']) && empty($modSettings['sm_stats_key']))
@@ -532,6 +538,8 @@ function ModifyCookieSettings($return_config = false)
 	{
 		call_integration_hook('integrate_save_cookie_settings');
 
+		$_POST['cookiename'] = $smcFunc['normalize']($_POST['cookiename']);
+
 		// Local and global do not play nicely together.
 		if (!empty($_POST['localCookies']) && empty($_POST['globalCookies']))
 			unset ($_POST['globalCookies']);
@@ -539,8 +547,13 @@ function ModifyCookieSettings($return_config = false)
 		if (empty($modSettings['localCookies']) != empty($_POST['localCookies']) || empty($modSettings['globalCookies']) != empty($_POST['globalCookies']))
 			$scope_changed = true;
 
-		if (!empty($_POST['globalCookiesDomain']) && strpos($boardurl, $_POST['globalCookiesDomain']) === false)
-			fatal_lang_error('invalid_cookie_domain', false);
+		if (!empty($_POST['globalCookiesDomain']))
+		{
+			$_POST['globalCookiesDomain'] = parse_iri(normalize_iri((strpos($_POST['globalCookiesDomain'], '//') === false ? 'http://' : '') . ltrim($_POST['globalCookiesDomain'], '.')), PHP_URL_HOST);
+
+			if (!preg_match('/(?:^|\.)' . preg_quote($_POST['globalCookiesDomain'], '/') . '$/u', parse_iri($boardurl, PHP_URL_HOST)))
+				fatal_lang_error('invalid_cookie_domain', false);
+		}
 
 		saveSettings($config_vars);
 
@@ -651,10 +664,10 @@ function ModifyGeneralSecuritySettings($return_config = false)
 			array(
 				'disabled' => $txt['setting_proxy_ip_header_disabled'],
 				'autodetect' => $txt['setting_proxy_ip_header_autodetect'],
-				'HTTP_X_FORWARDED_FOR' => 'HTTP_X_FORWARDED_FOR',
-				'HTTP_CLIENT_IP' => 'HTTP_CLIENT_IP',
-				'HTTP_X_REAL_IP' => 'HTTP_X_REAL_IP',
-				'CF-Connecting-IP' => 'CF-Connecting-IP'
+				'HTTP_X_FORWARDED_FOR' => 'X-Forwarded-For',
+				'HTTP_CLIENT_IP' => 'Client-IP',
+				'HTTP_X_REAL_IP' => 'X-Real-IP',
+				'HTTP_CF_CONNECTING_IP' => 'CF-Connecting-IP'
 			)
 		),
 		array('text', 'proxy_ip_servers'),
@@ -668,6 +681,26 @@ function ModifyGeneralSecuritySettings($return_config = false)
 	// Saving?
 	if (isset($_GET['save']))
 	{
+		if (!empty($_POST['cors_domains']))
+		{
+			$cors_domains = explode(',', $_POST['cors_domains']);
+
+			foreach ($cors_domains as &$cors_domain)
+			{
+				if (strpos($cors_domain, '//') === false)
+					$cors_domain = '//' . $cors_domain;
+
+				$temp = parse_iri(normalize_iri($cors_domain));
+
+				if (strpos($temp['host'], '*') !== false)
+					$temp['host'] = substr($temp['host'], strrpos($temp['host'], '*'));
+
+				$cors_domain = (!empty($temp['scheme']) ? $temp['scheme'] . '://' : '') . $temp['host'] . (!empty($temp['port']) ? ':' . $temp['port'] : '');
+			}
+
+			$_POST['cors_domains'] = implode(',', $cors_domains);
+		}
+
 		saveDBSettings($config_vars);
 		$_SESSION['adm-save'] = true;
 
@@ -795,12 +828,16 @@ function ModifyExportSettings($return_config = false)
 	if (empty($modSettings['export_dir']))
 		$modSettings['export_dir'] = $boarddir . DIRECTORY_SEPARATOR . 'exports';
 
-	/* Some paranoid hosts worry that the disk space functions pose a security risk. Usually these
-	 * hosts just disable the functions and move on, which is fine. A rare few, however, are not
-	 * only paranoid, but also think it'd be a "clever" security move to overload the disk space
-	 * functions with custom code that intentionally delivers false information, which is idiotic
-	 * and evil. At any rate, if the functions are unavailable or if they report obviously insane
-	 * values, it's not possible to track disk usage correctly. */
+	/*
+		Some paranoid hosts worry that the disk space functions pose a security
+		risk. Usually these hosts just disable the functions and move on, which
+		is fine. A rare few, however, are not only paranoid, but also think it'd
+		be a "clever" security move to overload the disk space functions with
+		custom code that intentionally delivers false information, which is
+		idiotic and evil. At any rate, if the functions are unavailable or if
+		they report obviously insane values, it's not possible to track disk
+		usage correctly.
+	 */
 	$diskspace_disabled = (!function_exists('disk_free_space') || !function_exists('disk_total_space') || intval(@disk_total_space(file_exists($modSettings['export_dir']) ? $modSettings['export_dir'] : $boarddir)) < 1440);
 
 	$context['settings_message'] = $txt['export_settings_description'];
@@ -819,7 +856,7 @@ function ModifyExportSettings($return_config = false)
 
 	if (isset($_REQUEST['save']))
 	{
-		$prev_export_dir = file_exists($modSettings['export_dir']) ? rtrim($modSettings['export_dir'], '/\\') : '';
+		$prev_export_dir = is_dir($modSettings['export_dir']) ? rtrim($modSettings['export_dir'], '/\\') : '';
 
 		if (!empty($_POST['export_dir']))
 			$_POST['export_dir'] = rtrim($_POST['export_dir'], '/\\');
@@ -1309,8 +1346,7 @@ function prepareDBSettingContext(&$config_vars)
 
 				$context['bbc_sections'][$bbcSection]['columns'][$col][] = array(
 					'tag' => $tag,
-					// @todo  'tag_' . ?
-					'show_help' => isset($helptxt[$tag]),
+					'show_help' => isset($helptxt['tag_' . $tag]),
 				);
 
 				$i++;
@@ -1350,6 +1386,8 @@ function saveSettings(&$config_vars)
 			$_POST['boardurl'] = substr($_POST['boardurl'], 0, -1);
 		if (substr($_POST['boardurl'], 0, 7) != 'http://' && substr($_POST['boardurl'], 0, 7) != 'file://' && substr($_POST['boardurl'], 0, 8) != 'https://')
 			$_POST['boardurl'] = 'http://' . $_POST['boardurl'];
+
+		$_POST['boardurl'] = normalize_iri($_POST['boardurl']);
 	}
 
 	// Any passwords?

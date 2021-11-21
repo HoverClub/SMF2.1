@@ -12,7 +12,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -397,10 +397,12 @@ function MessagePopup()
 		FROM {db_prefix}pm_recipients AS pmr
 		WHERE pmr.id_member = {int:current_member}
 			AND is_read = {int:not_read}
+			AND deleted = {int:not_deleted}
 		ORDER BY id_pm',
 		array(
 			'current_member' => $context['user']['id'],
 			'not_read' => 0,
+			'not_deleted' => 0,
 		)
 	);
 	$pms = array();
@@ -1820,6 +1822,8 @@ function MessagePost()
 	loadTemplate('PersonalMessage');
 	loadJavaScriptFile('PersonalMessage.js', array('defer' => false, 'minimize' => true), 'smf_pms');
 	loadJavaScriptFile('suggest.js', array('defer' => false, 'minimize' => true), 'smf_suggest');
+	if ($context['drafts_autosave'])
+		loadJavaScriptFile('drafts.js', array('defer' => false, 'minimize' => true), 'smf_drafts');
 	$context['sub_template'] = 'send';
 
 	// Extract out the spam settings - cause it's neat.

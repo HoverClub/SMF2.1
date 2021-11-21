@@ -1,11 +1,11 @@
 <?php
-// Version: 2.1 RC3; Who
+// Version: 2.1 RC4; Who
 
 global $scripturl, $context;
 
 $txt['who_hidden'] = 'Nothing, or nothing you can see...';
-$txt['who_admin'] = 'Viewing the admin portal';
-$txt['who_moderate'] = 'Viewing the moderator portal';
+$txt['who_admin'] = 'Viewing the Administration Center';
+$txt['who_moderate'] = 'Viewing the Moderation Center';
 $txt['who_generic'] = 'Viewing the';
 $txt['who_unknown'] = 'Unknown Action';
 $txt['who_user'] = 'User';

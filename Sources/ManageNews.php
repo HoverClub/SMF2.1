@@ -10,7 +10,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -232,6 +232,12 @@ function EditNews()
 						$("#preview_" + preview_id).text(\'' . $txt['preview'] . '\').click(function () {
 							$.ajax({
 								type: "POST",
+								headers: {
+									"X-SMF-AJAX": 1
+								},
+								xhrFields: {
+									withCredentials: typeof allow_xhjr_credentials !== "undefined" ? allow_xhjr_credentials : false
+								},
 								url: "' . $scripturl . '?action=xmlhttp;sa=previews;xml",
 								data: {item: "newspreview", news: $("#data_" + preview_id).val()},
 								context: document.body,
@@ -698,6 +704,7 @@ function SendMailing($clean_only = false)
 {
 	global $txt, $sourcedir, $context, $smcFunc;
 	global $scripturl, $modSettings, $user_info;
+	global $webmaster_email;
 
 	if (isset($_POST['preview']))
 	{
@@ -908,8 +915,8 @@ function SendMailing($clean_only = false)
 		if ($context['send_pm'])
 			continue;
 
-		// Non-members can't subscribe or unsubscribe from anything...
-		$unsubscribe_link = '';
+		// Non-members can't unsubscribe via the automated system.
+		$unsubscribe_link = sprintf($txt['unsubscribe_announcements_manual'], empty($modSettings['mail_from']) ? $webmaster_email : $modSettings['mail_from']);
 
 		$to_member = array(
 			$email,

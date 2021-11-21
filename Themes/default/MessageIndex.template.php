@@ -7,7 +7,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 /**
@@ -51,7 +51,7 @@ function template_main()
 
 			// Show the last post if there is one.
 			echo '
-			<div class="lastpost lpr_border">
+			<div class="lastpost">
 				', function_exists('template_bi_' . $board['type'] . '_lastpost') ? call_user_func('template_bi_' . $board['type'] . '_lastpost', $board) : template_bi_board_lastpost($board), '
 			</div>';
 
@@ -71,13 +71,6 @@ function template_main()
 
 	if (!$context['no_topic_listing'])
 	{
-		// Mobile action buttons (top)
-		if (!empty($context['normal_buttons']))
-			echo '
-	<div class="mobile_buttons floatright">
-		<a class="button mobile_act">', $txt['mobile_action'], '</a>
-	</div>';
-
 		echo '
 	<div class="pagesection">
 		', $context['menu_separator'], '
@@ -85,7 +78,16 @@ function template_main()
 			<a href="#bot" class="button">', $txt['go_down'], '</a>
 			', $context['page_index'], '
 		</div>
-		', template_button_strip($context['normal_buttons'], 'right'), '
+		', template_button_strip($context['normal_buttons'], 'right');
+
+		// Mobile action buttons (top)
+		if (!empty($context['normal_buttons']))
+			echo '
+		<div class="mobile_buttons floatright">
+			<a class="button mobile_act">', $txt['mobile_action'], '</a>
+		</div>';
+
+		echo '
 	</div>';
 
 		if ($context['description'] != '' || !empty($context['moderators']))
@@ -225,7 +227,6 @@ function template_main()
 								', $txt['started_by'], ' ', $topic['first_post']['member']['link'], '
 							</p>
 							', !empty($topic['pages']) ? '<span id="pages' . $topic['first_post']['id'] . '" class="topic_pages">' . $topic['pages'] . '</span>' : '', '
-							<br class="clear">
 						</div><!-- #topic_[first_post][id] -->
 					</div><!-- .info -->
 					<div class="board_stats centertext">
@@ -305,13 +306,6 @@ function template_main()
 		<input type="hidden" name="' . $context['session_var'] . '" value="' . $context['session_id'] . '">
 	</form>';
 
-		// Mobile action buttons (bottom)
-		if (!empty($context['normal_buttons']))
-			echo '
-	<div class="mobile_buttons floatright">
-		<a class="button mobile_act">', $txt['mobile_action'], '</a>
-	</div>';
-
 		echo '
 	<div class="pagesection">
 		', template_button_strip($context['normal_buttons'], 'right'), '
@@ -319,7 +313,16 @@ function template_main()
 		<div class="pagelinks floatleft">
 			<a href="#main_content_section" class="button" id="bot">', $txt['go_up'], '</a>
 			', $context['page_index'], '
-		</div>
+		</div>';
+
+		// Mobile action buttons (bottom)
+		if (!empty($context['normal_buttons']))
+			echo '
+			<div class="mobile_buttons floatright">
+				<a class="button mobile_act">', $txt['mobile_action'], '</a>
+			</div>';
+
+		echo '
 	</div>';
 	}
 
@@ -547,7 +550,6 @@ function template_topic_legend()
 			</script>';
 
 	echo '
-			<br class="clear">
 		</div><!-- .information -->
 	</div><!-- #topic_icons -->';
 }

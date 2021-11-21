@@ -11,7 +11,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -76,11 +76,14 @@ function bbc_to_html($text, $compat_mode = false)
 
 	// Parse unique ID's and disable javascript into the smileys - using the double space.
 	$i = 1;
-	$text = preg_replace_callback('~(?:\s|&nbsp;)?<(img\ssrc="' . preg_quote($modSettings['smileys_url'], '~') . '/[^<>]+?/([^<>]+?)"\s*)[^<>]*?class="smiley">~',
+	$text = preg_replace_callback(
+		'~(?:\s|&nbsp;)?<(img\ssrc="' . preg_quote($modSettings['smileys_url'], '~') . '/[^<>]+?/([^<>]+?)"\s*)[^<>]*?class="smiley">~',
 		function($m) use (&$i)
 		{
 			return '<' . stripslashes($m[1]) . 'alt="" title="" onresizestart="return false;" id="smiley_' . $i++ . '_' . $m[2] . '" style="padding: 0 3px 0 3px;">';
-		}, $text);
+		},
+		$text
+	);
 
 	return $text;
 }
@@ -676,7 +679,7 @@ function html_to_bbc($text)
 		if (!empty($src))
 		{
 			// Attempt to fix the path in case it's not present.
-			if (preg_match('~^https?://~i', $src) === 0 && is_array($parsedURL = parse_url($scripturl)) && isset($parsedURL['host']))
+			if (preg_match('~^https?://~i', $src) === 0 && is_array($parsedURL = parse_iri($scripturl)) && isset($parsedURL['host']))
 			{
 				$baseURL = (isset($parsedURL['scheme']) ? $parsedURL['scheme'] : 'http') . '://' . $parsedURL['host'] . (empty($parsedURL['port']) ? '' : ':' . $parsedURL['port']);
 
@@ -899,7 +902,7 @@ function html_to_bbc($text)
 				}
 
 				// No http(s), so attempt to fix this potential relative URL.
-				elseif (preg_match('~^https?://~i', $href) === 0 && is_array($parsedURL = parse_url($scripturl)) && isset($parsedURL['host']))
+				elseif (preg_match('~^https?://~i', $href) === 0 && is_array($parsedURL = parse_iri($scripturl)) && isset($parsedURL['host']))
 				{
 					$baseURL = (isset($parsedURL['scheme']) ? $parsedURL['scheme'] : 'http') . '://' . $parsedURL['host'] . (empty($parsedURL['port']) ? '' : ':' . $parsedURL['port']);
 
@@ -1087,10 +1090,13 @@ function legalise_bbc($text)
 		$lastlen = strlen($text = preg_replace($backToBackPattern, '', $text));
 
 	// Need to sort the tags by name length.
-	uksort($valid_tags, function($a, $b)
-	{
-		return strlen($a) < strlen($b) ? 1 : -1;
-	});
+	uksort(
+		$valid_tags,
+		function($a, $b)
+		{
+			return strlen($a) < strlen($b) ? 1 : -1;
+		}
+	);
 
 	// These inline tags can compete with each other regarding style.
 	$competing_tags = array(
@@ -1516,8 +1522,15 @@ function create_control_richedit($editorOptions)
 			$context['drafts_autosave_frequency'] = empty($modSettings['drafts_autosave_frequency']) ? 60000 : $modSettings['drafts_autosave_frequency'] * 1000;
 
 		// This really has some WYSIWYG stuff.
-		loadCSSFile('jquery.sceditor.css', array('force_current' => false, 'validate' => true), 'smf_jquery_sceditor');
+		loadCSSFile('jquery.sceditor.css', array('default_theme' => true, 'validate' => true), 'smf_jquery_sceditor');
 		loadTemplate('GenericControls');
+
+		/*
+		 *		THEME AUTHORS:
+		 			If you want to change or tweak the CSS for the editor,
+					include a file named 'jquery.sceditor.theme.css' in your theme.
+		*/
+		loadCSSFile('jquery.sceditor.theme.css', array('force_current' => true, 'validate' => true,), 'smf_jquery_sceditor_theme');
 
 		// JS makes the editor go round
 		loadJavaScriptFile('editor.js', array('minimize' => true), 'smf_editor');
@@ -1538,7 +1551,7 @@ function create_control_richedit($editorOptions)
 			"More": "' . $editortxt['more'] . '",
 			"Close": "' . $editortxt['close'] . '",
 			dateFormat: "' . $editortxt['dateformat'] . '"
-		}';
+		};';
 
 		addInlineJavaScript($scExtraLangs, true);
 

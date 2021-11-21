@@ -10,7 +10,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -765,7 +765,7 @@ function EditMembergroup()
 				'group_name' => $smcFunc['htmlspecialchars']($_POST['group_name']),
 				'online_color' => $_POST['online_color'],
 				'icons' => $_POST['icons'],
-				'group_desc' => $_POST['group_desc'],
+				'group_desc' => $smcFunc['normalize']($_POST['group_desc']),
 				'tfa_required' => $_POST['group_tfa_force'],
 			)
 		);

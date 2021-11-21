@@ -10,7 +10,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -132,7 +132,7 @@ function ShowAdminHelp()
 			$context['help_text'] = sprintf($context['help_text'], $txt['days_short'][1], $txt['days'][1]);
 			break;
 		case 'cron_is_real_cron':
-			$context['help_text'] = sprintf($context['help_text'], $boarddir, $boardurl);
+			$context['help_text'] = sprintf($context['help_text'], allowedTo('admin_forum') ? $boarddir : '[' . $txt['hidden'] . ']', $boardurl);
 			break;
 		case 'queryless_urls':
 			$context['help_text'] = sprintf($context['help_text'], (isset($_SERVER['SERVER_SOFTWARE']) && (strpos($_SERVER['SERVER_SOFTWARE'], 'Apache') !== false || strpos($_SERVER['SERVER_SOFTWARE'], 'lighttpd') !== false) ? $helptxt['queryless_urls_supported'] : $helptxt['queryless_urls_unsupported']));

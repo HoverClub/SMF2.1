@@ -1,5 +1,5 @@
 <?php
-// Version: 2.1 RC3; index
+// Version: 2.1 RC4; index
 
 global $forum_copyright, $webmaster_email, $scripturl, $context, $boardurl;
 
@@ -229,7 +229,16 @@ $txt['modified_by'] = 'Edited by';
 $txt['recent_posts'] = 'Recent posts';
 
 $txt['location'] = 'Location';
+$txt['location_desc'] = 'Geographic location.';
 $txt['gender'] = 'Gender';
+$txt['gender_0'] = 'None';
+$txt['gender_1'] = 'Male';
+$txt['gender_2'] = 'Female';
+$txt['gender_desc'] = 'Your gender.';
+$txt['icq'] = 'ICQ';
+$txt['icq_desc'] = 'This is your ICQ number.';
+$txt['skype'] = 'Skype';
+$txt['skype_desc'] = 'Your Skype username';
 $txt['personal_text'] = 'Personal text';
 $txt['date_registered'] = 'Date registered';
 
@@ -910,6 +919,7 @@ $txt['notify_announcements_unsubscribed'] = '%1$s has been unsubscribed from for
 
 $txt['unsubscribe_announcements_plain'] = 'To unsubscribe from forum newsletters, announcements and important notifications, follow this link: %1$s';
 $txt['unsubscribe_announcements_html'] = '<span style="font-size:small"><a href="%1$s">Unsubscribe</a> from forum newsletters, announcements and important notifications.</span>';
+$txt['unsubscribe_announcements_manual'] = 'To unsubscribe from forum newsletters, announcements and important notifications, contact us at %1$s with your request.';
 
 // Mobile Actions
 $txt['mobile_action'] = 'User actions';

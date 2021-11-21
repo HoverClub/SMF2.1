@@ -10,7 +10,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -249,6 +249,9 @@ function EditSmileySets()
 		{
 			$set_paths = explode(',', $modSettings['smiley_sets_known']);
 			$set_names = explode("\n", $modSettings['smiley_sets_names']);
+
+			foreach (array('smiley_sets_path', 'smiley_sets_name') as $key)
+				$_POST[$key] = $smcFunc['normalize']($_POST[$key]);
 
 			// Create a new smiley set.
 			if ($_POST['set'] == -1 && isset($_POST['smiley_sets_path']))
@@ -612,6 +615,9 @@ function AddSmiley()
 	if (isset($_POST[$context['session_var']], $_POST['smiley_code']))
 	{
 		checkSession();
+
+		foreach (array('smiley_code', 'smiley_filename', 'smiley_description') as $key)
+			$_POST[$key] = $smcFunc['normalize']($_POST[$key]);
 
 		$_POST['smiley_code'] = htmltrim__recursive($_POST['smiley_code']);
 		$_POST['smiley_location'] = empty($_POST['smiley_location']) || $_POST['smiley_location'] > 2 || $_POST['smiley_location'] < 0 ? 0 : (int) $_POST['smiley_location'];
@@ -1005,6 +1011,9 @@ function EditSmileys()
 			// Otherwise an edit.
 			else
 			{
+				foreach (array('smiley_code', 'smiley_description') as $key)
+					$_POST[$key] = $smcFunc['normalize']($_POST[$key]);
+
 				$_POST['smiley'] = (int) $_POST['smiley'];
 				$_POST['smiley_code'] = htmltrim__recursive($_POST['smiley_code']);
 				$_POST['smiley_location'] = empty($_POST['smiley_location']) || $_POST['smiley_location'] > 2 || $_POST['smiley_location'] < 0 ? 0 : (int) $_POST['smiley_location'];
@@ -1068,8 +1077,8 @@ function EditSmileys()
 				$filenames = array();
 				foreach ($_POST['smiley_filename'] as $posted_set => $posted_filename)
 				{
-					$posted_set = htmltrim__recursive($posted_set);
-					$posted_filename = htmltrim__recursive($posted_filename);
+					$posted_set = $smcFunc['htmltrim']($smcFunc['normalize']($posted_set));
+					$posted_filename = $smcFunc['htmltrim']($smcFunc['normalize']($posted_filename));
 
 					// Make sure the set already exists.
 					if (!in_array($posted_set, $known_sets))
@@ -1392,7 +1401,7 @@ function EditSmileys()
 		$request = $smcFunc['db_query']('', '
 			SELECT s.id_smiley AS id, s.code, f.filename, f.smiley_set, s.description, s.hidden AS location
 			FROM {db_prefix}smileys AS s
-				JOIN {db_prefix}smiley_files AS f ON (s.id_smiley = f.id_smiley)
+				LEFT JOIN {db_prefix}smiley_files AS f ON (s.id_smiley = f.id_smiley)
 			WHERE s.id_smiley = {int:current_smiley}',
 			array(
 				'current_smiley' => (int) $_REQUEST['smiley'],
@@ -1465,7 +1474,7 @@ function list_getSmileys($start, $items_per_page, $sort)
 	$request = $smcFunc['db_query']('', '
 		SELECT s.id_smiley, s.code, f.filename, f.smiley_set, s.description, s.smiley_row, s.smiley_order, s.hidden
 		FROM {db_prefix}smileys AS s
-			JOIN {db_prefix}smiley_files AS f ON (s.id_smiley = f.id_smiley)
+			LEFT JOIN {db_prefix}smiley_files AS f ON (s.id_smiley = f.id_smiley)
 		ORDER BY {raw:sort}',
 		array(
 			'sort' => $sort,
@@ -1598,9 +1607,8 @@ function EditSmileyOrder()
 	$request = $smcFunc['db_query']('', '
 		SELECT s.id_smiley, s.code, f.filename, s.description, s.smiley_row, s.smiley_order, s.hidden
 		FROM {db_prefix}smileys AS s
-			JOIN {db_prefix}smiley_files AS f ON (s.id_smiley = f.id_smiley)
+			LEFT JOIN {db_prefix}smiley_files AS f ON (s.id_smiley = f.id_smiley AND f.smiley_set = {string:smiley_set})
 		WHERE s.hidden != {int:popup}
-			AND f.smiley_set = {string:smiley_set}
 		ORDER BY s.smiley_order, s.smiley_row',
 		array(
 			'popup' => 1,
@@ -2224,6 +2232,9 @@ function EditMessageIcons()
 		elseif ($context['sub_action'] == 'editicon' && isset($_GET['icon']))
 		{
 			$_GET['icon'] = (int) $_GET['icon'];
+
+			foreach (array('icon_filename', 'icon_description') as $key)
+				$_POST[$key] = $smcFunc['normalize']($_POST[$key]);
 
 			// Do some preperation with the data... like check the icon exists *somewhere*
 			if (strpos($_POST['icon_filename'], '.png') !== false)

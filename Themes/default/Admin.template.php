@@ -7,7 +7,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 /**
@@ -756,7 +756,9 @@ function template_show_settings()
 	}
 
 	// Filter out any redundant separators before we start the loop
-	$context['config_vars'] = array_filter($context['config_vars'], function ($v) use ($context)
+	$context['config_vars'] = array_filter(
+		$context['config_vars'],
+		function ($v) use ($context)
 		{
 			static $config_vars, $prev;
 
@@ -775,7 +777,8 @@ function template_show_settings()
 
 			$prev = $v;
 			return ($v === '' && ($at_start || $at_end || $v === $next)) ? false : true;
-		});
+		}
+	);
 
 	// Now actually loop through all the variables.
 	$is_open = false;
@@ -916,14 +919,13 @@ function template_show_settings()
 												<li><label><input type="checkbox" name="', $config_var['name'], '[', $brd['id'], ']" value="1"', in_array($brd['id'], $config_var['value']) ? ' checked' : '', '> ', $brd['child_level'] > 0 ? str_repeat('&nbsp; &nbsp;', $brd['child_level']) : '', $brd['name'], '</label></li>';
 
 						echo '
-												<li>
-													<input type="checkbox" onclick="invertAll(this, this.form, \'' . $config_var['name'] . '[\');">
-													<span>', $txt['check_all'], '</span>
-												</li>
 											</ul>';
 						$first = false;
 					}
 					echo '
+											<hr />
+											<input type="checkbox" onclick="invertAll(this, this.form, \'' . $config_var['name'] . '[\');">
+											<span>', $txt['check_all'], '</span>
 										</fieldset>';
 				}
 				// Text area?
@@ -939,7 +941,7 @@ function template_show_settings()
 				{
 					echo '
 										<fieldset id="', $config_var['name'], '">
-											<legend>', $txt['enabled_bbc_select'], '</legend>
+											<legend>', $context['bbc_sections'][$config_var['name']]['title'], '</legend>
 											<ul>';
 
 					foreach ($context['bbc_sections'][$config_var['name']]['columns'] as $bbcColumn)
@@ -1117,13 +1119,19 @@ function template_edit_profile_field()
 
 									<dl class="settings">
 										<dt>
-											<strong><label for="field_name">', $txt['custom_edit_name'], ':</label></strong>
+											<a id="field_name_help" href="', $scripturl, '?action=helpadmin;help=translatable_fields" onclick="return reqOverlayDiv(this.href);" class="help"><span class="main_icons help" title="', $txt['help'], '"></span></a>
+											<strong><label for="field_name">', $txt['custom_edit_name'], ':</label></strong><br>
+											<span class="smalltext">', $txt['custom_edit_name_desc'], '</span>
 										</dt>
 										<dd>
 											<input type="text" name="field_name" id="field_name" value="', $context['field']['name'], '" size="20" maxlength="40">
 										</dd>
 										<dt>
-											<strong><label for="field_desc">', $txt['custom_edit_desc'], ':</label></strong>
+											<a id="field_desc_help" href="', $scripturl, '?action=helpadmin;help=translatable_fields" onclick="return reqOverlayDiv(this.href);" class="help">
+												<span class="main_icons help" title="', $txt['help'], '"></span>
+											</a>
+											<strong><label for="field_desc">', $txt['custom_edit_desc'], ':</label></strong><br>
+											<span class="smalltext">', $txt['custom_edit_name_desc'], '</span>
 										</dt>
 										<dd>
 											<textarea name="field_desc" id="field_desc" rows="3" cols="40">', $context['field']['desc'], '</textarea>
@@ -1190,7 +1198,7 @@ function template_edit_profile_field()
 									<legend>', $txt['custom_edit_input'], '</legend>
 									<dl class="settings">
 										<dt>
-										<strong><label for="field_type">', $txt['custom_edit_picktype'], ':</label></strong>
+											<strong><label for="field_type">', $txt['custom_edit_picktype'], ':</label></strong>
 										</dt>
 										<dd>
 											<select name="field_type" id="field_type" onchange="updateInputBoxes();">';
@@ -1219,13 +1227,15 @@ function template_edit_profile_field()
 										<dt id="bbc_dt">
 											<strong><label for="bbc_dd">', $txt['custom_edit_bbc'], '</label></strong>
 										</dt>
-										<dd >
+										<dd>
 											<input type="checkbox" name="bbc" id="bbc_dd"', $context['field']['bbc'] ? ' checked' : '', '>
 										</dd>
 										<dt id="options_dt">
 											<a href="', $scripturl, '?action=helpadmin;help=customoptions" onclick="return reqOverlayDiv(this.href);" class="help"><span class="main_icons help" title="', $txt['help'], '"></span></a>
 											<strong><label for="options_dd">', $txt['custom_edit_options'], ':</label></strong><br>
 											<span class="smalltext">', $txt['custom_edit_options_desc'], '</span>
+											<br>
+											<span>', $txt['custom_edit_name_desc'], '</span>
 										</dt>
 										<dd id="options_dd">';
 
@@ -1266,7 +1276,7 @@ function template_edit_profile_field()
 											</span>
 										</dd>
 										<dt>
-											<strong><label for="private">', $txt['custom_edit_privacy'], ':</label></strong>
+											<strong><label for="private">', $txt['custom_edit_privacy'], ':</label></strong><br>
 											<span class="smalltext">', $txt['custom_edit_privacy_desc'], '</span>
 										</dt>
 										<dd>

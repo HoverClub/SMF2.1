@@ -1,5 +1,5 @@
 <?php
-// Version: 2.1 RC3; Profile
+// Version: 2.1 RC4; Profile
 
 global $scripturl, $context;
 
@@ -57,7 +57,6 @@ $txt['send_member_pm'] = 'Send this member a personal message';
 $txt['hidden'] = 'hidden';
 $txt['current_time'] = 'Current forum time';
 
-$txt['skype_username'] = 'Your Skype username';
 
 $txt['language'] = 'Language';
 $txt['avatar_too_big'] = 'Avatar image is too big, please resize it and try again (max';
@@ -145,7 +144,7 @@ $txt['alert_board_notify'] = 'When a board I follow gets a topic, I normally wan
 $txt['alert_msg_mention'] = 'When my @name is mentioned in a post';
 $txt['alert_msg_quote'] = 'When a post of mine is quoted (when I\'m not already watching that topic)';
 $txt['alert_msg_like'] = 'When a message of mine is liked';
-$txt['alert_unapproved_reply'] = 'When an reply is made to my unapproved topic';
+$txt['alert_unapproved_reply'] = 'When a reply is made to my unapproved topic';
 $txt['alert_group_pm'] = 'Personal Messages';
 $txt['alert_pm_new'] = 'When I receive a new personal message';
 $txt['alert_pm_reply'] = 'When a personal message I sent gets replied to';
@@ -168,7 +167,7 @@ $txt['alert_birthday'] = 'When it\'s my birthday';
 $txt['alert_member_report'] = 'When another member\'s profile is reported';
 $txt['alert_member_report_reply'] = 'When a member report I\'ve replied to gets replied to';
 $txt['alert_group_paidsubs'] = 'Paid Subscriptions';
-$txt['alert_paidsubs_expiring'] = 'When your Paid Subscriptions are about to expire';
+$txt['alert_paidsubs_expiring'] = 'When my Paid Subscriptions are about to expire';
 $txt['toggle_all'] = 'toggle all';
 
 $txt['notifications_topics'] = 'Current Topic Notifications';
@@ -324,6 +323,7 @@ $txt['ban_type_access'] = 'access forum';
 $txt['show_online'] = 'Show others my online status';
 
 $txt['return_to_post'] = 'Return to topics after posting by default';
+$txt['no_new_reply_warning'] = 'Don\'t warn on new replies made while posting.';
 $txt['posts_apply_ignore_list'] = 'Hide messages posted by members on my ignore list';
 $txt['recent_posts_at_top'] = 'Show most recent posts at the top in topic view';
 $txt['recent_pms_at_top'] = 'Show most recent personal messages at top';
@@ -428,7 +428,7 @@ $txt['submit_request'] = 'Submit Request';
 $txt['profile_updated_own'] = 'Your profile has been updated successfully.';
 $txt['profile_updated_else'] = 'The profile of %1$s has been updated successfully.';
 
-$txt['profile_error_signature_max_length'] = 'Your signature cannot be greater than %1$d characters';
+$txt['profile_error_signature_max_length'] = 'Your signature cannot be longer than %1$d characters';
 $txt['profile_error_signature_max_lines'] = 'Your signature cannot span more than %1$d lines';
 $txt['profile_error_signature_max_image_size'] = 'Images in your signature must be no greater than %1$dx%2$d pixels';
 $txt['profile_error_signature_max_image_width'] = 'Images in your signature must be no wider than %1$d pixels';

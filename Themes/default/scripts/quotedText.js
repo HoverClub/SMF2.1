@@ -70,6 +70,12 @@ function quotedTextClick(oOptions)
 		$.ajax({
 			url: smf_prepareScriptUrl(smf_scripturl) + 'action=quotefast;quote=' + oOptions.msgID + ';xml;pb='+ oEditorID + ';mode=' + (oEditorObject.bRichTextEnabled ? 1 : 0),
 			type: 'GET',
+			headers: {
+				"X-SMF-AJAX": 1
+			},
+			xhrFields: {
+				withCredentials: typeof allow_xhjr_credentials !== "undefined" ? allow_xhjr_credentials : false
+			},
 			dataType: 'xml',
 			beforeSend: function () {
 				ajax_indicator(true);
@@ -78,6 +84,9 @@ function quotedTextClick(oOptions)
 				ajax_indicator(false);
 			},
 			success: function (data, textStatus, xhr) {
+				// Convert all smileys from images back to smiley code
+				oOptions.text = oOptions.text.replaceAll(/<img src=".*?" alt="(.*?)" title=".*?" class="smiley">/, '$1');
+
 				// Search the xml data to get the quote tag.
 				text = $(data).find('quote').text();
 
@@ -128,6 +137,9 @@ $(function() {
 
 		// Show the "quote this" button.
 		$('#quoteSelected_' + oSelected.msgID).show();
+
+		// Remove any previous selection
+		$(document).off('click', '#quoteSelected_' + oSelected.msgID + ' a');
 
 		$(document).one('click', '#quoteSelected_' + oSelected.msgID + ' a', function(e) {
 			e.preventDefault();

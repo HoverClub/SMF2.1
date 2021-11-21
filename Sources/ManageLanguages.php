@@ -10,7 +10,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -911,10 +911,13 @@ function ModifyLanguage()
 
 		if (!empty($context['possible_files'][$theme]['files']))
 		{
-			usort($context['possible_files'][$theme]['files'], function($val1, $val2)
-			{
-				return strcmp($val1['name'], $val2['name']);
-			});
+			usort(
+				$context['possible_files'][$theme]['files'],
+				function($val1, $val2)
+				{
+					return strcmp($val1['name'], $val2['name']);
+				}
+			);
 		}
 	}
 
@@ -1656,6 +1659,8 @@ function cleanLangString($string, $to_display = true)
 	}
 	else
 	{
+		$string = $smcFunc['normalize']($string);
+
 		// Keep track of what we're doing...
 		$in_string = 0;
 		// This is for deciding whether to HTML a quote.

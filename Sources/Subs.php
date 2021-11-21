@@ -10,7 +10,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -849,9 +849,13 @@ function timeformat($log_time, $show_today = true, $offset_type = false, $proces
 
 	$timeformat = $finalizedFormats[$str][$format_type];
 
+	// Windows requires a slightly different language code identifier (LCID).
+	// https://msdn.microsoft.com/en-us/library/cc233982.aspx
+	$lang_locale = $context['server']['is_windows'] ? strtr($txt['lang_locale'], '_', '-') : $txt['lang_locale'];
+
 	// Make sure we are using the correct locale.
 	if (!isset($locale) || ($process_safe === true && setlocale(LC_TIME, '0') != $locale))
-		$locale = setlocale(LC_TIME, array($txt['lang_locale'] . '.' . $modSettings['global_character_set'], $txt['lang_locale'] . '.' . $txt['lang_character_set'], $txt['lang_locale']));
+		$locale = setlocale(LC_TIME, array($lang_locale . '.' . $modSettings['global_character_set'], $lang_locale . '.' . $txt['lang_character_set'], $lang_locale));
 
 	// If the current locale is unsupported, we'll have to localize the hard way.
 	if ($locale === false)
@@ -1096,6 +1100,144 @@ function un_htmlspecialchars($string)
 }
 
 /**
+ * Replaces invalid characters with a substitute.
+ *
+ * !!! Warning !!! Setting $substitute to '' in order to delete invalid
+ * characters from the string can create unexpected security problems. See
+ * https://www.unicode.org/reports/tr36/#Deletion_of_Noncharacters for an
+ * explanation.
+ *
+ * @param string $string The string to sanitize.
+ * @param int $level Controls filtering of invisible formatting characters.
+ *      0: Allow valid formatting characters. Use for sanitizing text in posts.
+ *      1: Allow necessary formatting characters. Use for sanitizing usernames.
+ *      2: Disallow all formatting characters. Use for internal comparisions
+ *         only, such as in the word censor, search contexts, etc.
+ *      Default: 0.
+ * @param string|null $substitute Replacement string for the invalid characters.
+ *      If not set, the Unicode replacement character (U+FFFD) will be used
+ *      (or a fallback like "?" if necessary).
+ * @return string The sanitized string.
+ */
+function sanitize_chars($string, $level = 0, $substitute = null)
+{
+	global $context, $sourcedir;
+
+	$string = (string) $string;
+	$level = min(max((int) $level, 0), 2);
+
+	// What substitute character should we use?
+	if (isset($substitute))
+	{
+		$substitute = strval($substitute);
+	}
+	elseif (!empty($context['utf8']))
+	{
+		// Raw UTF-8 bytes for U+FFFD.
+		$substitute = "\xEF\xBF\xBD";
+	}
+	elseif (!empty($context['character_set']) && is_callable('mb_decode_numericentity'))
+	{
+		// Get whatever the default replacement character is for this encoding.
+		$substitute = mb_decode_numericentity('&#xFFFD;', array(0xFFFD,0xFFFD,0,0xFFFF), $context['character_set']);
+	}
+	else
+		$substitute = '?';
+
+	// Fix any invalid byte sequences.
+	if (!empty($context['character_set']))
+	{
+		// For UTF-8, this preg_match test is much faster than mb_check_encoding.
+		$malformed = !empty($context['utf8']) ? @preg_match('//u', $string) === false && preg_last_error() === PREG_BAD_UTF8_ERROR : (!is_callable('mb_check_encoding') || !mb_check_encoding($string, $context['character_set']));
+
+		if ($malformed)
+		{
+			// mb_convert_encoding will replace invalid byte sequences with our substitute.
+			if (is_callable('mb_convert_encoding'))
+			{
+				if (!is_callable('mb_ord'))
+					require_once($sourcedir . '/Subs-Compat.php');
+
+				$substitute_ord = $substitute === '' ? 'none' : mb_ord($substitute, $context['character_set']);
+
+				$mb_substitute_character = mb_substitute_character();
+				mb_substitute_character($substitute_ord);
+
+				$string = mb_convert_encoding($string, $context['character_set'], $context['character_set']);
+
+				mb_substitute_character($mb_substitute_character);
+			}
+			else
+				return false;
+		}
+	}
+
+	// Fix any weird vertical space characters.
+	$string = normalize_spaces($string, true);
+
+	// Deal with unwanted control characters, invisible formatting characters, and other creepy-crawlies.
+	if (!empty($context['utf8']))
+	{
+		require_once($sourcedir . '/Subs-Charset.php');
+		$string = utf8_sanitize_invisibles($string, $level, $substitute);
+	}
+	else
+		$string = preg_replace('/[^\P{Cc}\t\r\n]/', $substitute, $string);
+
+	return $string;
+}
+
+/**
+ * Normalizes space characters and line breaks.
+ *
+ * @param string $string The string to sanitize.
+ * @param bool $vspace If true, replaces all line breaks and vertical space
+ *      characters with "\n". Default: true.
+ * @param bool $hspace If true, replaces horizontal space characters with a
+ *      plain " " character. (Note: tabs are not replaced unless the
+ *      'replace_tabs' option is supplied.) Default: false.
+ * @param array $options An array of boolean options. Possible values are:
+ *      - no_breaks: Vertical spaces are replaced by " " instead of "\n".
+ *      - replace_tabs: If true, tabs are are replaced by " " chars.
+ *      - collapse_hspace: If true, removes extra horizontal spaces.
+ * @return string The sanitized string.
+ */
+function normalize_spaces($string, $vspace = true, $hspace = false, $options = array())
+{
+	global $context;
+
+	$string = (string) $string;
+	$vspace = !empty($vspace);
+	$hspace = !empty($hspace);
+
+	if (!$vspace && !$hspace)
+		return $string;
+
+	$options['no_breaks'] = !empty($options['no_breaks']);
+	$options['collapse_hspace'] = !empty($options['collapse_hspace']);
+	$options['replace_tabs'] = !empty($options['replace_tabs']);
+
+	$patterns = array();
+	$replacements = array();
+
+	if ($vspace)
+	{
+		// \R is like \v, except it handles "\r\n" as a single unit.
+		$patterns[] = '/\R/' . ($context['utf8'] ? 'u' : '');
+		$replacements[] = $options['no_breaks'] ? ' ' : "\n";
+	}
+
+	if ($hspace)
+	{
+		// Interesting fact: Unicode properties like \p{Zs} work even when not in UTF-8 mode.
+		$patterns[] = '/' . ($options['replace_tabs'] ? '\h' : '\p{Zs}') . ($options['collapse_hspace'] ? '+' : '') . '/' . ($context['utf8'] ? 'u' : '');
+		$replacements[] = ' ';
+	}
+
+	return preg_replace($patterns, $replacements, $string);
+}
+
+/**
  * Shorten a subject + internationalization concerns.
  *
  * - shortens a subject so that it is either shorter than length, or that length plus an ellipsis.
@@ -1178,6 +1320,35 @@ function permute($array)
 }
 
 /**
+ * Return an array with allowed bbc tags for signatures, that can be passed to parse_bbc().
+ *
+ * @return array An array containing allowed tags for signatures, or an empty array if all tags are allowed.
+ */
+function get_signature_allowed_bbc_tags()
+{
+	global $modSettings;
+
+	list ($sig_limits, $sig_bbc) = explode(':', $modSettings['signature_settings']);
+	if (empty($sig_bbc))
+		return array();
+	$disabledTags = explode(',', $sig_bbc);
+
+	// Get all available bbc tags
+	$temp = parse_bbc(false);
+	$allowedTags = array();
+	foreach ($temp as $tag)
+		if (!in_array($tag['tag'], $disabledTags))
+			$allowedTags[] = $tag['tag'];
+
+	$allowedTags = array_unique($allowedTags);
+	if (empty($allowedTags))
+		// An empty array means that all bbc tags are allowed. So if all tags are disabled we need to add a dummy tag.
+		$allowedTags[] = 'nonexisting';
+
+	return $allowedTags;
+}
+
+/**
  * Parse bulletin board code in a string, as well as smileys optionally.
  *
  * - only parses bbc tags which are not disabled in disabledBBC.
@@ -1201,7 +1372,7 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 {
 	global $smcFunc, $txt, $scripturl, $context, $modSettings, $user_info, $sourcedir, $cache_enable;
 	static $bbc_lang_locales = array(), $itemcodes = array(), $no_autolink_tags = array();
-	static $disabled, $alltags_regex = '', $param_regexes = array();
+	static $disabled, $alltags_regex = '', $param_regexes = array(), $url_regex = '';
 
 	// Don't waste cycles
 	if ($message === '')
@@ -1272,8 +1443,18 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 				);
 		}
 
+		if (!empty($parse_tags))
+		{
+			if (!in_array('email', $parse_tags))
+				$disabled['email'] = true;
+			if (!in_array('url', $parse_tags))
+				$disabled['url'] = true;
+			if (!in_array('iurl', $parse_tags))
+				$disabled['iurl'] = true;
+		}
+
 		// The YouTube bbc needs this for its origin parameter
-		$scripturl_parts = parse_url($scripturl);
+		$scripturl_parts = parse_iri($scripturl);
 		$hosturl = $scripturl_parts['scheme'] . '://' . $scripturl_parts['host'];
 
 		/* The following bbc are formatted as an array, with keys as follows:
@@ -1440,7 +1621,7 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 						if (!empty($currentAttachment['is_image']))
 						{
 							if (empty($params['{width}']) && empty($params['{height}']))
-								$returnContext .= '<img src="' . $currentAttachment['href'] . '"' . $alt . $title . ' class="bbc_img"></a>';
+								$returnContext .= '<img src="' . $currentAttachment['href'] . '"' . $alt . $title . ' class="bbc_img">';
 							else
 							{
 								$width = !empty($params['{width}']) ? ' width="' . $params['{width}'] . '"': '';
@@ -1451,24 +1632,24 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 						// Video.
 						elseif (strpos($currentAttachment['mime_type'], 'video/') === 0)
 						{
-							$width = !empty($width) ? ' width="' . $width . '"' : '';
-							$height = !empty($height) ? ' height="' . $height . '"' : '';
+							$width = !empty($params['{width}']) ? ' width="' . $params['{width}'] . '"' : '';
+							$height = !empty($params['{height}']) ? ' height="' . $params['{height}'] . '"' : '';
 
 							$returnContext .= '<div class="videocontainer"><video controls preload="metadata" src="'. $currentAttachment['href'] . '" playsinline' . $width . $height . '><a href="' . $currentAttachment['href'] . '" class="bbc_link">' . $smcFunc['htmlspecialchars'](!empty($data) ? $data : $currentAttachment['name']) . '</a></video></div>' . (!empty($data) && $data != $currentAttachment['name'] ? '<div class="smalltext">' . $data . '</div>' : '');
 						}
 						// Audio.
 						elseif (strpos($currentAttachment['mime_type'], 'audio/') === 0)
 						{
-							$width = 'max-width:100%; width: ' . (!empty($width) ? $width : '400') . 'px;';
-							$height = !empty($height) ? 'height: ' . $height . 'px;' : '';
+							$width = 'max-width:100%; width: ' . (!empty($params['{width}']) ? $params['{width}'] : '400') . 'px;';
+							$height = !empty($params['{height}']) ? 'height: ' . $params['{height}'] . 'px;' : '';
 
 							$returnContext .= (!empty($data) && $data != $currentAttachment['name'] ? $data . ' ' : '') . '<audio controls preload="none" src="'. $currentAttachment['href'] . '" class="bbc_audio" style="vertical-align:middle;' . $width . $height . '"><a href="' . $currentAttachment['href'] . '" class="bbc_link">' . $smcFunc['htmlspecialchars'](!empty($data) ? $data : $currentAttachment['name']) . '</a></audio>';
 						}
 						// Anything else.
 						else
 						{
-							$width = !empty($width) ? ' width="' . $width . '"' : '';
-							$height = !empty($height) ? ' height="' . $height . '"' : '';
+							$width = !empty($params['{width}']) ? ' width="' . $params['{width}'] . '"' : '';
+							$height = !empty($params['{height}']) ? ' height="' . $params['{height}'] . '"' : '';
 
 							$returnContext .= '<object type="' . $currentAttachment['mime_type'] . '" data="' . $currentAttachment['href'] . '"' . $width . $height . ' typemustmatch><a href="' . $currentAttachment['href'] . '" class="bbc_link">' . $smcFunc['htmlspecialchars'](!empty($data) ? $data : $currentAttachment['name']) . '</a></object>';
 						}
@@ -1633,9 +1814,15 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 				'content' => '<a href="$1" target="_blank" rel="noopener">$1</a>',
 				'validate' => function (&$tag, &$data, $disabled)
 				{
-					$scheme = parse_url($data[0], PHP_URL_SCHEME);
+					$data[0] = normalize_iri($data[0]);
+
+					$scheme = parse_iri($data[0], PHP_URL_SCHEME);
 					if (empty($scheme))
 						$data[0] = '//' . ltrim($data[0], ':/');
+
+					$ascii_url = iri_to_url($data[0]);
+					if ($ascii_url !== $data[0])
+						$tag['content'] = str_replace('href="$1"', 'href="' . $ascii_url . '"', $tag['content']);
 				},
 			),
 			array(
@@ -1665,10 +1852,15 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 				'content' => '<a href="$1" class="bbc_link" target="_blank" rel="noopener">$1</a>',
 				'validate' => function(&$tag, &$data, $disabled)
 				{
-					$data = strtr($data, array('<br>' => ''));
-					$scheme = parse_url($data, PHP_URL_SCHEME);
+					$data = normalize_iri(strtr($data, array('<br>' => '')));
+
+					$scheme = parse_iri($data, PHP_URL_SCHEME);
 					if (empty($scheme))
 						$data = 'ftp://' . ltrim($data, ':/');
+
+					$ascii_url = iri_to_url($data);
+					if ($ascii_url !== $data)
+						$tag['content'] = str_replace('href="$1"', 'href="' . $ascii_url . '"', $tag['content']);
 				},
 			),
 			// Legacy (alias of [url] with an FTP URL)
@@ -1679,7 +1871,9 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 				'after' => '</a>',
 				'validate' => function(&$tag, &$data, $disabled)
 				{
-					$scheme = parse_url($data, PHP_URL_SCHEME);
+					$data = iri_to_url($data);
+
+					$scheme = parse_iri($data, PHP_URL_SCHEME);
 					if (empty($scheme))
 						$data = 'ftp://' . ltrim($data, ':/');
 				},
@@ -1731,37 +1925,23 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 				'parameters' => array(
 					'alt' => array('optional' => true),
 					'title' => array('optional' => true),
-				),
-				'content' => '<img src="$1" alt="{alt}" title="{title}" class="bbc_img" loading="lazy">',
-				'validate' => function(&$tag, &$data, $disabled)
-				{
-					$data = strtr($data, array('<br>' => ''));
-
-					if (parse_url($data, PHP_URL_SCHEME) === null)
-						$data = '//' . ltrim($data, ':/');
-					else
-						$data = get_proxied_url($data);
-				},
-				'disabled_content' => '($1)',
-			),
-			array(
-				'tag' => 'img',
-				'type' => 'unparsed_content',
-				'parameters' => array(
-					'alt' => array('optional' => true),
-					'title' => array('optional' => true),
 					'width' => array('optional' => true, 'value' => ' width="$1"', 'match' => '(\d+)'),
 					'height' => array('optional' => true, 'value' => ' height="$1"', 'match' => '(\d+)'),
 				),
-				'content' => '<img src="$1" alt="{alt}" title="{title}"{width}{height} class="bbc_img resized" loading="lazy">',
-				'validate' => function(&$tag, &$data, $disabled)
+				'content' => '$1',
+				'validate' => function(&$tag, &$data, $disabled, $params)
 				{
-					$data = strtr($data, array('<br>' => ''));
+					$url = iri_to_url(strtr($data, array('<br>' => '')));
 
-					if (parse_url($data, PHP_URL_SCHEME) === null)
-						$data = '//' . ltrim($data, ':/');
+					if (parse_iri($url, PHP_URL_SCHEME) === null)
+						$url = '//' . ltrim($url, ':/');
 					else
-						$data = get_proxied_url($data);
+						$url = get_proxied_url($url);
+
+					$alt = !empty($params['{alt}']) ? ' alt="' . $params['{alt}']. '"' : ' alt=""';
+					$title = !empty($params['{title}']) ? ' title="' . $params['{title}']. '"' : '';
+
+					$data = isset($disabled[$tag['tag']]) ? $url : '<img src="' . $url . '"' . $alt . $title . $params['{width}'] . $params['{height}'] . ' class="bbc_img' . (!empty($params['{width}']) || !empty($params['{height}']) ? ' resized' : '') . '" loading="lazy">';
 				},
 				'disabled_content' => '($1)',
 			),
@@ -1771,10 +1951,15 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 				'content' => '<a href="$1" class="bbc_link">$1</a>',
 				'validate' => function(&$tag, &$data, $disabled)
 				{
-					$data = strtr($data, array('<br>' => ''));
-					$scheme = parse_url($data, PHP_URL_SCHEME);
+					$data = normalize_iri(strtr($data, array('<br>' => '')));
+
+					$scheme = parse_iri($data, PHP_URL_SCHEME);
 					if (empty($scheme))
 						$data = '//' . ltrim($data, ':/');
+
+					$ascii_url = iri_to_url($data);
+					if ($ascii_url !== $data)
+						$tag['content'] = str_replace('href="$1"', 'href="' . $ascii_url . '"', $tag['content']);
 				},
 			),
 			array(
@@ -1789,7 +1974,9 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 						$data = '#post_' . substr($data, 1);
 					else
 					{
-						$scheme = parse_url($data, PHP_URL_SCHEME);
+						$data = iri_to_url($data);
+
+						$scheme = parse_iri($data, PHP_URL_SCHEME);
 						if (empty($scheme))
 							$data = '//' . ltrim($data, ':/');
 					}
@@ -2081,10 +2268,15 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 				'content' => '<a href="$1" class="bbc_link" target="_blank" rel="noopener">$1</a>',
 				'validate' => function(&$tag, &$data, $disabled)
 				{
-					$data = strtr($data, array('<br>' => ''));
-					$scheme = parse_url($data, PHP_URL_SCHEME);
+					$data = normalize_iri(strtr($data, array('<br>' => '')));
+
+					$scheme = parse_iri($data, PHP_URL_SCHEME);
 					if (empty($scheme))
 						$data = '//' . ltrim($data, ':/');
+
+					$ascii_url = iri_to_url($data);
+					if ($ascii_url !== $data)
+						$tag['content'] = str_replace('href="$1"', 'href="' . $ascii_url . '"', $tag['content']);
 				},
 			),
 			array(
@@ -2095,7 +2287,9 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 				'after' => '</a>',
 				'validate' => function(&$tag, &$data, $disabled)
 				{
-					$scheme = parse_url($data, PHP_URL_SCHEME);
+					$data = iri_to_url($data);
+
+					$scheme = parse_iri($data, PHP_URL_SCHEME);
 					if (empty($scheme))
 						$data = '//' . ltrim($data, ':/');
 				},
@@ -2132,10 +2326,13 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 		// This is mainly for the bbc manager, so it's easy to add tags above.  Custom BBC should be added above this line.
 		if ($message === false)
 		{
-			usort($codes, function($a, $b)
-			{
-				return strcmp($a['tag'], $b['tag']);
-			});
+			usort(
+				$codes,
+				function($a, $b)
+				{
+					return strcmp($a['tag'], $b['tag']);
+				}
+			);
 			return $codes;
 		}
 
@@ -2185,8 +2382,39 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 				),
 			),
 			'before' => '<pre data-e="{e}" data-t="{t}"><div>',
-			'after' => '</div><script>' . '$("head").append("<style>" + ' . JavaScriptEscape(base64_decode('cHJlW2RhdGEtZV1bZGF0YS10XXt3aGl0ZS1zcGFjZTpwcmUtd3JhcDtsaW5lLWhlaWdodDppbml0aWFsO31wcmVbZGF0YS1lXVtkYXRhLXRdID4gZGl2e2Rpc3BsYXk6dGFibGU7Ym9yZGVyOjFweCBzb2xpZDtib3JkZXItcmFkaXVzOjAuNWVtO3BhZGRpbmc6MWNoO21heC13aWR0aDo4MGNoO21pbi13aWR0aDoxMmNoO31wcmVbZGF0YS1lXVtkYXRhLXRdOjphZnRlcntkaXNwbGF5OmlubGluZS1ibG9jazttYXJnaW4tbGVmdDo4Y2g7bWluLXdpZHRoOjIwY2g7ZGlyZWN0aW9uOmx0cjtjb250ZW50OidcNUMgJycgJycgXl9fXlxBICcnIFw1QyAnJyAoJyBhdHRyKGRhdGEtZSkgJylcNUNfX19fX19fXEEgJycgJycgJycgKF9fKVw1QyAnJyAnJyAnJyAnJyAnJyAnJyAnJyApXDVDL1w1Q1xBICcnICcnICcnICcnICcgYXR0cihkYXRhLXQpICcgfHwtLS0tdyB8XEEgJycgJycgJycgJycgJycgJycgJycgfHwgJycgJycgJycgJycgfHwnO30=')) . ' + "</style>");' . '</script></pre>',
+			'after' => '</div></pre>',
 			'block_level' => true,
+			'validate' => function(&$tag, &$data, $disabled, $params)
+			{
+				static $moo = true;
+
+				if ($moo)
+				{
+					addInlineJavaScript("\n\t" . base64_decode(
+						'aWYoZG9jdW1lbnQuZ2V0RWxlbWVudEJ5SWQoImJvdmluZV9vcmFjbGU
+						iKT09PW51bGwpe2xldCBzdHlsZU5vZGU9ZG9jdW1lbnQuY3JlYXRlRWx
+						lbWVudCgic3R5bGUiKTtzdHlsZU5vZGUuaWQ9ImJvdmluZV9vcmFjbGU
+						iO3N0eWxlTm9kZS5pbm5lckhUTUw9J3ByZVtkYXRhLWVdW2RhdGEtdF1
+						7d2hpdGUtc3BhY2U6cHJlLXdyYXA7bGluZS1oZWlnaHQ6aW5pdGlhbDt
+						9cHJlW2RhdGEtZV1bZGF0YS10XSA+IGRpdntkaXNwbGF5OnRhYmxlO2J
+						vcmRlcjoxcHggc29saWQ7Ym9yZGVyLXJhZGl1czowLjVlbTtwYWRkaW5
+						nOjFjaDttYXgtd2lkdGg6ODBjaDttaW4td2lkdGg6MTJjaDt9cHJlW2R
+						hdGEtZV1bZGF0YS10XTo6YWZ0ZXJ7ZGlzcGxheTppbmxpbmUtYmxvY2s
+						7bWFyZ2luLWxlZnQ6OGNoO21pbi13aWR0aDoyMGNoO2RpcmVjdGlvbjp
+						sdHI7Y29udGVudDpcJ1xcNUMgXCdcJyBcJ1wnIF5fX15cXEEgXCdcJyB
+						cXDVDIFwnXCcgKFwnIGF0dHIoZGF0YS1lKSBcJylcXDVDX19fX19fX1x
+						cQSBcJ1wnIFwnXCcgXCdcJyAoX18pXFw1QyBcJ1wnIFwnXCcgXCdcJyB
+						cJ1wnIFwnXCcgXCdcJyBcJ1wnIClcXDVDL1xcNUNcXEEgXCdcJyBcJ1w
+						nIFwnXCcgXCdcJyBcJyBhdHRyKGRhdGEtdCkgXCcgfHwtLS0tdyB8XFx
+						BIFwnXCcgXCdcJyBcJ1wnIFwnXCcgXCdcJyBcJ1wnIFwnXCcgfHwgXCd
+						cJyBcJ1wnIFwnXCcgXCdcJyB8fFwnO30nO2RvY3VtZW50LmdldEVsZW1
+						lbnRzQnlUYWdOYW1lKCJoZWFkIilbMF0uYXBwZW5kQ2hpbGQoc3R5bGV
+						Ob2RlKTt9'
+					), true);
+
+					$moo = false;
+				}
+			}
 		);
 
 		foreach ($codes as $code)
@@ -2292,6 +2520,8 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 
 			$placeholders = array();
 			$placeholders_counter = 0;
+			// Wrap in "private use" Unicode characters to ensure there will be no conflicts.
+			$placeholder_template = html_entity_decode('&#xE03C;') . '%1$s' . html_entity_decode('&#xE03E;');
 
 			// Take care of some HTML!
 			if (!empty($modSettings['enablePostHTML']) && strpos($data, '&lt;') !== false)
@@ -2328,7 +2558,7 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 						if (preg_match('~action(=|%3d)(?!dlattach)~i', $imgtag) != 0)
 							$imgtag = preg_replace('~action(?:=|%3d)(?!dlattach)~i', 'action-', $imgtag);
 
-						$placeholder = '<placeholder ' . ++$placeholders_counter . '>';
+						$placeholder = sprintf($placeholder_template, ++$placeholders_counter);
 						$placeholders[$placeholder] = '[img' . $alt . ']' . $imgtag . '[/img]';
 
 						$replaces[$matches[0][$match]] = $placeholder;
@@ -2361,173 +2591,435 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 					// An &nbsp; right after a URL can break the autolinker
 					if (strpos($data, '&nbsp;') !== false)
 					{
-						$placeholders['<placeholder non-breaking-space>'] = '&nbsp;';
-						$data = strtr($data, array('&nbsp;' => '<placeholder non-breaking-space>'));
+						$placeholders[html_entity_decode('&nbsp;', null, $context['character_set'])] = '&nbsp;';
+						$data = strtr($data, array('&nbsp;' => html_entity_decode('&nbsp;', null, $context['character_set'])));
 					}
+
+					// Some reusable character classes
+					$excluded_trailing_chars = '!;:.,?';
+					$domain_label_chars = '0-9A-Za-z\-' . ($context['utf8'] ? implode('', array(
+						'\x{A0}-\x{D7FF}', '\x{F900}-\x{FDCF}', '\x{FDF0}-\x{FFEF}',
+						'\x{10000}-\x{1FFFD}', '\x{20000}-\x{2FFFD}', '\x{30000}-\x{3FFFD}',
+						'\x{40000}-\x{4FFFD}', '\x{50000}-\x{5FFFD}', '\x{60000}-\x{6FFFD}',
+						'\x{70000}-\x{7FFFD}', '\x{80000}-\x{8FFFD}', '\x{90000}-\x{9FFFD}',
+						'\x{A0000}-\x{AFFFD}', '\x{B0000}-\x{BFFFD}', '\x{C0000}-\x{CFFFD}',
+						'\x{D0000}-\x{DFFFD}', '\x{E1000}-\x{EFFFD}',
+					)) : '');
 
 					// Parse any URLs
 					if (!isset($disabled['url']) && strpos($data, '[url') === false)
 					{
-						// For efficiency, first define the TLD regex in a PCRE subroutine
-						$url_regex = '(?(DEFINE)(?<tlds>' . $modSettings['tld_regex'] . '))';
+						// URI schemes that require some sort of special handling.
+						$schemes = array(
+							// Schemes whose URI definitions require a domain name in the
+							// authority (or whatever the next part of the URI is).
+							'need_domain' => array(
+								'aaa', 'aaas', 'acap', 'acct', 'afp', 'cap', 'cid', 'coap',
+								'coap+tcp', 'coap+ws', 'coaps', 'coaps+tcp', 'coaps+ws', 'crid',
+								'cvs', 'dict', 'dns', 'feed', 'fish', 'ftp', 'git', 'go',
+								'gopher', 'h323', 'http', 'https', 'iax', 'icap', 'im', 'imap',
+								'ipp', 'ipps', 'irc', 'irc6', 'ircs', 'ldap', 'ldaps', 'mailto',
+								'mid', 'mupdate', 'nfs', 'nntp', 'pop', 'pres', 'reload',
+								'rsync', 'rtsp', 'sftp', 'sieve', 'sip', 'sips', 'smb', 'snmp',
+								'soap.beep', 'soap.beeps', 'ssh', 'svn', 'stun', 'stuns',
+								'telnet', 'tftp', 'tip', 'tn3270', 'turn', 'turns', 'tv', 'udp',
+								'vemmi', 'vnc', 'webcal', 'ws', 'wss', 'xmlrpc.beep',
+								'xmlrpc.beeps', 'xmpp', 'z39.50', 'z39.50r', 'z39.50s',
+							),
+							// Schemes that allow an empty authority ("://" followed by "/")
+							'empty_authority' => array(
+								'file', 'ni', 'nih',
+							),
+							// Schemes that do not use an authority but still have a reasonable
+							// chance of working as clickable links.
+							'no_authority' => array(
+								'about', 'callto', 'geo', 'gg', 'leaptofrogans', 'magnet',
+								'mailto', 'maps', 'news', 'ni', 'nih', 'service', 'skype',
+								'sms', 'tel', 'tv',
+							),
+							// Schemes that we should never link.
+							'forbidden' => array(
+								'javascript', 'data',
+							),
+						);
 
-						// Now build the rest of the regex
-						$url_regex .=
-						// 1. IRI scheme and domain components
-						'(?:' .
-							// 1a. IRIs with a scheme, or at least an opening "//"
-							'(?:' .
+						// In case a mod wants to control behaviour for a special URI scheme.
+						call_integration_hook('integrate_autolinker_schemes', array(&$schemes));
 
-								// URI scheme (or lack thereof for schemeless URLs)
-								'(?:' .
-									// URL scheme and colon
-									'\b[a-z][\w\-]+:' .
-									// or
-									'|' .
-									// A boundary followed by two slashes for schemeless URLs
-									'(?<=^|\W)(?=//)' .
-								')' .
+						// Don't repeat this unnecessarily.
+						if (empty($url_regex))
+						{
+							// PCRE subroutines for efficiency.
+							$pcre_subroutines = array(
+								'tlds' => $modSettings['tld_regex'],
+								'pct' => '%[0-9A-Fa-f]{2}',
+								'domain_label_char' => '[' . $domain_label_chars . ']',
+								'not_domain_label_char' => '[^' . $domain_label_chars . ']',
+								'domain' => '(?:(?P>domain_label_char)+\.)+(?P>tlds)',
+								'no_domain' => '(?:(?P>domain_label_char)|[._\~!$&\'()*+,;=:@]|(?P>pct))+',
+								'scheme_need_domain' => build_regex($schemes['need_domain'], '~'),
+								'scheme_empty_authority' => build_regex($schemes['empty_authority'], '~'),
+								'scheme_no_authority' => build_regex($schemes['no_authority'], '~'),
+								'scheme_any' => '[A-Za-z][0-9A-Za-z+\-.]*',
+								'user_info' => '(?:(?P>domain_label_char)|[._\~!$&\'()*+,;=:]|(?P>pct))+',
+								'dec_octet' => '(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]\d|\d)',
+								'h16' => '[0-9A-Fa-f]{1,4}',
+								'ipv4' => '(?:\b(?:(?P>dec_octet)\.){3}(?P>dec_octet)\b)',
+								'ipv6' => '\[(?:' . implode('|', array(
+									'(?:(?P>h16):){7}(?P>h16)',
+									'(?:(?P>h16):){1,7}:',
+									'(?:(?P>h16):){1,6}(?::(?P>h16))',
+									'(?:(?P>h16):){1,5}(?::(?P>h16)){1,2}',
+									'(?:(?P>h16):){1,4}(?::(?P>h16)){1,3}',
+									'(?:(?P>h16):){1,3}(?::(?P>h16)){1,4}',
+									'(?:(?P>h16):){1,2}(?::(?P>h16)){1,5}',
+									'(?P>h16):(?::(?P>h16)){1,6}',
+									':(?:(?::(?P>h16)){1,7}|:)',
+									'fe80:(?::(?P>h16)){0,4}%[0-9A-Za-z]+',
+									'::(ffff(:0{1,4})?:)?(?P>ipv4)',
+									'(?:(?P>h16):){1,4}:(?P>ipv4)',
+								)) . ')\]',
+								'host' => '(?:' . implode('|', array(
+									'localhost',
+									'(?P>domain)',
+									'(?P>ipv4)',
+									'(?P>ipv6)',
+								)) . ')',
+								'authority' => '(?:(?P>user_info)@)?(?P>host)(?::\d+)?',
+							);
 
-								// IRI "authority" chunk
-								'(?:' .
-									// 2 slashes for IRIs with an "authority"
-									'//' .
-									// then a domain name
+							// Brackets and quotation marks are problematic at the end of an IRI.
+							// E.g.: `http://foo.com/baz(qux)` vs. `(http://foo.com/baz_qux)`
+							// In the first case, the user probably intended the `)` as part of the
+							// IRI, but not in the second case. To account for this, we test for
+							// balanced pairs within the IRI.
+							$balanced_pairs = array(
+								// Brackets and parentheses
+								'(' => ')', '[' => ']', '{' => '}',
+								// Double quotation marks
+								'"' => '"',
+								html_entity_decode('&#x201C;', null, $context['character_set']) => html_entity_decode('&#x201D;', null, $context['character_set']),
+								html_entity_decode('&#x201E;', null, $context['character_set']) => html_entity_decode('&#x201D;', null, $context['character_set']),
+								html_entity_decode('&#x201F;', null, $context['character_set']) => html_entity_decode('&#x201D;', null, $context['character_set']),
+								html_entity_decode('&#x00AB;', null, $context['character_set']) => html_entity_decode('&#x00BB;', null, $context['character_set']),
+								// Single quotation marks
+								'\'' => '\'',
+								html_entity_decode('&#x2018;', null, $context['character_set']) => html_entity_decode('&#x2019;', null, $context['character_set']),
+								html_entity_decode('&#x201A;', null, $context['character_set']) => html_entity_decode('&#x2019;', null, $context['character_set']),
+								html_entity_decode('&#x201B;', null, $context['character_set']) => html_entity_decode('&#x2019;', null, $context['character_set']),
+								html_entity_decode('&#x2039;', null, $context['character_set']) => html_entity_decode('&#x203A;', null, $context['character_set']),
+							);
+							foreach ($balanced_pairs as $pair_opener => $pair_closer)
+								$balanced_pairs[$smcFunc['htmlspecialchars']($pair_opener)] = $smcFunc['htmlspecialchars']($pair_closer);
+
+							$bracket_quote_chars = '';
+							$bracket_quote_entities = array();
+							foreach ($balanced_pairs as $pair_opener => $pair_closer)
+							{
+								if ($pair_opener == $pair_closer)
+									$pair_closer = '';
+
+								foreach (array($pair_opener, $pair_closer) as $bracket_quote)
+								{
+									if (strpos($bracket_quote, '&') === false)
+										$bracket_quote_chars .= $bracket_quote;
+									else
+										$bracket_quote_entities[] = substr($bracket_quote, 1);
+								}
+							}
+							$bracket_quote_chars = str_replace(array('[', ']'), array('\[', '\]'), $bracket_quote_chars);
+
+							$pcre_subroutines['bracket_quote'] = '[' . $bracket_quote_chars . ']|&' . build_regex($bracket_quote_entities, '~');
+							$pcre_subroutines['allowed_entities'] = '&(?!' . build_regex(array_merge($bracket_quote_entities, array('lt;', 'gt;')), '~') . ')';
+							$pcre_subroutines['excluded_lookahead'] = '(?![' . $excluded_trailing_chars . ']*(?>[\h\v]|<br>|$))';
+
+							foreach (array('path', 'query', 'fragment') as $part)
+							{
+								switch ($part) {
+									case 'path':
+										$part_disallowed_chars = '\h\v<>' . $bracket_quote_chars . $excluded_trailing_chars . '/#&';
+										$part_excluded_trailing_chars = str_replace('?', '', $excluded_trailing_chars);
+										break;
+
+									case 'query':
+										$part_disallowed_chars = '\h\v<>' . $bracket_quote_chars . $excluded_trailing_chars . '#&';
+										$part_excluded_trailing_chars = $excluded_trailing_chars;
+										break;
+
+									default:
+										$part_disallowed_chars = '\h\v<>' . $bracket_quote_chars . $excluded_trailing_chars . '&';
+										$part_excluded_trailing_chars = $excluded_trailing_chars;
+										break;
+								}
+								$pcre_subroutines[$part . '_allowed'] = '[^' . $part_disallowed_chars . ']|(?P>allowed_entities)|[' . $part_excluded_trailing_chars . '](?P>excluded_lookahead)';
+
+								$balanced_construct_regex = array();
+
+								foreach ($balanced_pairs as $pair_opener => $pair_closer)
+									$balanced_construct_regex[] = preg_quote($pair_opener) . '(?P>' . $part . '_recursive)*+' . preg_quote($pair_closer);
+
+								$pcre_subroutines[$part . '_balanced'] = '(?:' . implode('|', $balanced_construct_regex) . ')(?P>' . $part . '_allowed)*+';
+								$pcre_subroutines[$part . '_recursive'] = '(?' . '>(?P>' . $part . '_allowed)|(?P>' . $part . '_balanced))';
+
+								$pcre_subroutines[$part . '_segment'] =
+									// Allowed characters besides brackets and quotation marks
+									'(?P>' . $part . '_allowed)*+' .
+									// Brackets and quotation marks that are either...
 									'(?:' .
-										// Either the reserved "localhost" domain name
-										'localhost' .
+										// part of a balanced construct
+										'(?P>' . $part . '_balanced)' .
 										// or
 										'|' .
-										// a run of IRI characters, a dot, and a TLD
-										'[\p{L}\p{M}\p{N}\-.:@]+\.(?P>tlds)' .
-									')' .
-									// followed by a non-domain character or end of line
-									'(?=[^\p{L}\p{N}\-.]|$)' .
-
-									// or, if no "authority" per se (e.g. "mailto:" URLs)...
-									'|' .
-
-									// a run of IRI characters
-									'[\p{L}\p{N}][\p{L}\p{M}\p{N}\-.:@]+[\p{L}\p{M}\p{N}]' .
-									// and then a dot and a closing IRI label
-									'\.[\p{L}\p{M}\p{N}\-]+' .
-								')' .
-							')' .
-
-							// Or
-							'|' .
-
-							// 1b. Naked domains (e.g. "example.com" in "Go to example.com for an example.")
-							'(?:' .
-								// Preceded by start of line or a non-domain character
-								'(?<=^|[^\p{L}\p{M}\p{N}\-:@])' .
-								// A run of Unicode domain name characters (excluding [:@])
-								'[\p{L}\p{N}][\p{L}\p{M}\p{N}\-.]+[\p{L}\p{M}\p{N}]' .
-								// and then a dot and a valid TLD
-								'\.(?P>tlds)' .
-								// Followed by either:
-								'(?=' .
-									// end of line or a non-domain character (excluding [.:@])
-									'$|[^\p{L}\p{N}\-]' .
-									// or
-									'|' .
-									// a dot followed by end of line or a non-domain character (excluding [.:@])
-									'\.(?=$|[^\p{L}\p{N}\-])' .
-								')' .
-							')' .
-						')' .
-
-						// 2. IRI path, query, and fragment components (if present)
-						'(?:' .
-
-							// If any of these parts exist, must start with a single "/"
-							'/' .
-
-							// And then optionally:
-							'(?:' .
-								// One or more of:
-								'(?:' .
-									// a run of non-space, non-()<>
-									'[^\s()<>]+' .
-									// or
-									'|' .
-									// balanced parentheses, up to 2 levels
-									'\(([^\s()<>]+|(\([^\s()<>]+\)))*\)' .
-								')+' .
-								// Ending with:
-								'(?:' .
-									// balanced parentheses, up to 2 levels
-									'\(([^\s()<>]+|(\([^\s()<>]+\)))*\)' .
-									// or
-									'|' .
-									// not a space or one of these punctuation characters
-									'[^\s`!()\[\]{};:\'".,<>?«»“”‘’/]' .
-									// or
-									'|' .
-									// a trailing slash (but not two in a row)
-									'(?<!/)/' .
-								')' .
-							')?' .
-						')?';
-
-						$data = preg_replace_callback('~' . $url_regex . '~i' . ($context['utf8'] ? 'u' : ''), function($matches)
-						{
-							$url = array_shift($matches);
-
-							// If this isn't a clean URL, bail out
-							if ($url != sanitize_iri($url))
-								return $url;
-
-							$scheme = parse_url($url, PHP_URL_SCHEME);
-
-							if ($scheme == 'mailto')
-							{
-								$email_address = str_replace('mailto:', '', $url);
-								if (!isset($disabled['email']) && filter_var($email_address, FILTER_VALIDATE_EMAIL) !== false)
-									return '[email=' . $email_address . ']' . $url . '[/email]';
-								else
-									return $url;
+										// unpaired but not at the end
+										'(?P>bracket_quote)(?=(?P>' . $part . '_allowed))' .
+									')*+';
 							}
 
-							// Are we linking a schemeless URL or naked domain name (e.g. "example.com")?
-							if (empty($scheme))
-								$fullUrl = '//' . ltrim($url, ':/');
-							else
-								$fullUrl = $url;
+							// Time to build this monster!
+							$url_regex =
+							// 1. IRI scheme and domain components
+							'(?:' .
+								// 1a. IRIs with a scheme, or at least an opening "//"
+								'(?:' .
 
-							// Make sure that $fullUrl really is valid
-							if (validate_iri((strpos($fullUrl, '//') === 0 ? 'http:' : '') . $fullUrl) === false)
-								return $url;
+									// URI scheme (or lack thereof for schemeless URLs)
+									'(?:' .
+										// URI scheme and colon
+										'\b' .
+										'(?:' .
+											// Either a scheme that need a domain in the authority
+											// (Remember for later that we need a domain)
+											'(?P<need_domain>(?P>scheme_need_domain)):' .
+											// or
+											'|' .
+											// a scheme that allows an empty authority
+											// (Remember for later that the authority can be empty)
+											'(?P<empty_authority>(?P>scheme_empty_authority)):' .
+											// or
+											'|' .
+											// a scheme that uses no authority
+											'(?P>scheme_no_authority):(?!//)' .
+											// or
+											'|' .
+											// another scheme, but only if it is followed by "://"
+											'(?P>scheme_any):(?=//)' .
+										')' .
 
-							return '[url=&quot;' . str_replace(array('[', ']'), array('&#91;', '&#93;'), $fullUrl) . '&quot;]' . $url . '[/url]';
-						}, $data);
+										// or
+										'|' .
+
+										// An empty string followed by "//" for schemeless URLs
+										'(?P<schemeless>(?=//))' .
+									')' .
+
+									// IRI authority chunk (maybe)
+									'(?:' .
+										// (Keep track of whether we find a valid authority or not)
+										'(?P<has_authority>' .
+											// 2 slashes before the authority itself
+											'//' .
+											'(?:' .
+												// If there was no scheme...
+												'(?(<schemeless>)' .
+													// require an authority that contains a domain.
+													'(?P>authority)' .
+
+													// Else if a domain is needed...
+													'|(?(<need_domain>)' .
+														// require an authority with a domain.
+														'(?P>authority)' .
+
+														// Else if an empty authority is allowed...
+														'|(?(<empty_authority>)' .
+															// then require either
+															'(?:' .
+																// empty string, followed by a "/"
+																'(?=/)' .
+																// or
+																'|' .
+																// an authority with a domain.
+																'(?P>authority)' .
+															')' .
+
+															// Else just a run of IRI characters.
+															'|(?P>no_domain)' .
+														')' .
+													')' .
+												')' .
+											')' .
+											// Followed by a non-domain character or end of line
+											'(?=(?P>not_domain_label_char)|$)' .
+										')' .
+
+										// or, if there is a scheme but no authority
+										// (e.g. "mailto:" URLs)...
+										'|' .
+
+										// A run of IRI characters
+										'(?P>no_domain)' .
+										// If scheme needs a domain, require a dot and a TLD
+										'(?(<need_domain>)\.(?P>tlds))' .
+										// Followed by a non-domain character or end of line
+										'(?=(?P>not_domain_label_char)|$)' .
+									')' .
+								')' .
+
+								// Or, if there is neither a scheme nor an authority...
+								'|' .
+
+								// 1b. Naked domains
+								// (e.g. "example.com" in "Go to example.com for an example.")
+								'(?P<naked_domain>' .
+									// Preceded by start of line or a space
+									'(?<=^|<br>|[\h\v])' .
+									// A domain name
+									'(?P>domain)' .
+									// Followed by a non-domain character or end of line
+									'(?=(?P>not_domain_label_char)|$)' .
+								')' .
+							')' .
+
+							// 2. IRI path, query, and fragment components (if present)
+							'(?:' .
+								// If the IRI has an authority or is a naked domain and any of these
+								// components exist, the path must start with a single "/".
+								// Note: technically, it is valid to append a query or fragment
+								// directly to the authority chunk without a "/", but supporting
+								// that in the autolinker would produce a lot of false positives,
+								// so we don't.
+								'(?=' .
+									// If we found an authority above...
+									'(?(<has_authority>)' .
+										// require a "/"
+										'/' .
+										// Else if we found a naked domain above...
+										'|(?(<naked_domain>)' .
+											// require a "/"
+											'/' .
+										')' .
+									')' .
+								')' .
+
+								// 2.a. Path component, if any.
+								'(?:' .
+									// Can have one or more segments
+									'(?:' .
+										// Not preceded by a "/", except in the special case of an
+										// empty authority immediately before the path.
+										'(?(<empty_authority>)' .
+											'(?:(?<=://)|(?<!/))' .
+											'|' .
+											'(?<!/)' .
+										')' .
+										// Initial "/"
+										'/' .
+										// Then a run of allowed path segement characters
+										'(?P>path_segment)*+' .
+									')*+' .
+								')' .
+
+								// 2.b. Query component, if any.
+								'(?:' .
+									// Initial "?" that is not last character.
+									'\?' . '(?=(?P>bracket_quote)*(?P>query_allowed))' .
+									// Then a run of allowed query characters
+									'(?P>query_segment)*+' .
+								')?' .
+
+								// 2.c. Fragment component, if any.
+								'(?:' .
+									// Initial "#" that is not last character.
+									'#' . '(?=(?P>bracket_quote)*(?P>fragment_allowed))' .
+									// Then a run of allowed fragment characters
+									'(?P>fragment_segment)*+' .
+								')?' .
+							')?+';
+
+							// Finally, define the PCRE subroutines in the regex.
+							$url_regex .= '(?(DEFINE)';
+
+							foreach ($pcre_subroutines as $name => $subroutine)
+								$url_regex .= '(?<' . $name . '>' . $subroutine . ')';
+
+							$url_regex .= ')';
+						}
+
+						$tmp_data = preg_replace_callback(
+							'~' . $url_regex . '~i' . ($context['utf8'] ? 'u' : ''),
+							function($matches) use ($schemes)
+							{
+								$url = array_shift($matches);
+
+								// If this isn't a clean URL, bail out
+								if ($url != sanitize_iri($url))
+									return $url;
+
+								// Ensure the host name is in its canonical form.
+								$url = normalize_iri($url);
+
+								$parsedurl = parse_iri($url);
+
+								if (!isset($parsedurl['scheme']))
+									$parsedurl['scheme'] = '';
+
+								if ($parsedurl['scheme'] == 'mailto')
+								{
+									if (isset($disabled['email']))
+										return $url;
+
+									// Is this version of PHP capable of validating this email address?
+									$can_validate = defined('FILTER_FLAG_EMAIL_UNICODE') || strlen($parsedurl['path']) == strspn(strtolower($parsedurl['path']), 'abcdefghijklmnopqrstuvwxyz0123456789!#$%&\'*+-/=?^_`{|}~.@');
+
+									$flags = defined('FILTER_FLAG_EMAIL_UNICODE') ? FILTER_FLAG_EMAIL_UNICODE : null;
+
+									if (!$can_validate || filter_var($parsedurl['path'], FILTER_VALIDATE_EMAIL, $flags) !== false)
+										return '[email=' . str_replace('mailto:', '', $url) . ']' . $url . '[/email]';
+									else
+										return $url;
+								}
+
+								// Are we linking a schemeless URL or naked domain name (e.g. "example.com")?
+								if (empty($parsedurl['scheme']))
+									$fullUrl = '//' . ltrim($url, ':/');
+								else
+									$fullUrl = $url;
+
+								// Make sure that $fullUrl really is valid
+								if (in_array($parsedurl['scheme'], $schemes['forbidden']) || (!in_array($parsedurl['scheme'], $schemes['no_authority']) && validate_iri((strpos($fullUrl, '//') === 0 ? 'http:' : '') . $fullUrl) === false))
+									return $url;
+
+								return '[url=&quot;' . str_replace(array('[', ']'), array('&#91;', '&#93;'), iri_to_url($fullUrl)) . '&quot;]' . $url . '[/url]';
+							},
+							$data
+						);
+
+						if (!is_null($tmp_data))
+							$data = $tmp_data;
 					}
 
 					// Next, emails...  Must be careful not to step on enablePostHTML logic above...
 					if (!isset($disabled['email']) && strpos($data, '@') !== false && strpos($data, '[email') === false && stripos($data, 'mailto:') === false)
 					{
-						$email_regex = '
-						# Preceded by a non-domain character or start of line
-						(?<=^|[^\p{L}\p{M}\p{N}\-\.])
+						// Preceded by a space or start of line
+						$email_regex = '(?<=^|<br>|[\h\v])' .
 
-						# An email address
-						[\p{L}\p{M}\p{N}_\-.]{1,80}
-						@
-						[\p{L}\p{M}\p{N}\-.]+
-						\.
-						' . $modSettings['tld_regex'] . '
+						// An email address
+						'[' . $domain_label_chars . '_.]{1,80}' .
+						'@' .
+						'[' . $domain_label_chars . '.]+' .
+						'\.' . $modSettings['tld_regex'] .
 
-						# Followed by either:
-						(?=
-							# end of line or a non-domain character (excluding the dot)
-							$|[^\p{L}\p{M}\p{N}\-]
-							| # or
-							# a dot followed by end of line or a non-domain character
-							\.(?=$|[^\p{L}\p{M}\p{N}\-])
-						)';
+						// Followed by a non-domain character or end of line
+						'(?=[^' . $domain_label_chars . ']|$)';
 
-						$data = preg_replace('~' . $email_regex . '~xi' . ($context['utf8'] ? 'u' : ''), '[email]$0[/email]', $data);
+						$tmp_data = preg_replace('~' . $email_regex . '~i' . ($context['utf8'] ? 'u' : ''), '[email]$0[/email]', $data);
+
+						if (!is_null($tmp_data))
+							$data = $tmp_data;
 					}
+
+					// Save a little memory.
+					unset($tmp_data);
 				}
 			}
 
@@ -2563,10 +3055,7 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 			$look_for = strtolower(substr($message, $pos + 2, $pos2 - $pos - 2));
 
 			// A closing tag that doesn't match any open tags? Skip it.
-			if (!in_array($look_for, array_map(function($code)
-			{
-				return $code['tag'];
-			}, $open_tags)))
+			if (!in_array($look_for, array_map(function($code) { return $code['tag']; }, $open_tags)))
 				continue;
 
 			$to_close = array();
@@ -2973,6 +3462,12 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 		if (!isset($tag['type']))
 		{
 			$open_tags[] = $tag;
+
+			// There's no data to change, but maybe do something based on params?
+			$data = null;
+			if (isset($tag['validate']))
+				$tag['validate']($tag, $data, $disabled, $params);
+
 			$message = substr($message, 0, $pos) . "\n" . $tag['before'] . "\n" . substr($message, $pos1);
 			$pos += strlen($tag['before']) - 1 + 2;
 		}
@@ -3041,6 +3536,12 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 		elseif ($tag['type'] == 'closed')
 		{
 			$pos2 = strpos($message, ']', $pos);
+
+			// Maybe a custom BBC wants to do something special?
+			$data = null;
+			if (isset($tag['validate']))
+				$tag['validate']($tag, $data, $disabled, $params);
+
 			$message = substr($message, 0, $pos) . "\n" . $tag['content'] . "\n" . substr($message, $pos2 + 1);
 			$pos += strlen($tag['content']) - 1 + 2;
 		}
@@ -3113,6 +3614,9 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 			{
 				$end_of_value = strpos($message, '&quot;]', $pos1);
 				$nested_tag = strpos($message, '=&quot;', $pos1);
+				// Check so this is not just an quoted url ending with a =
+				if ($nested_tag && substr($message, $nested_tag, 8) == '=&quot;]')
+					$nested_tag = false;
 				if ($nested_tag && $nested_tag < $end_of_value)
 					// Nested tag with quoted value detected, use next end tag
 					$nested_tag_pos = strpos($message, $quoted == false ? ']' : '&quot;]', $pos1) + 6;
@@ -3287,11 +3791,19 @@ function parsesmileys(&$message)
 		$smileyPregSearch = '~(?<=[>:\?\.\s' . $non_breaking_space . '[\]()*\\\;]|(?<![a-zA-Z0-9])\(|^)(' . build_regex($searchParts, '~') . ')(?=[^[:alpha:]0-9]|$)~' . ($context['utf8'] ? 'u' : '');
 	}
 
+	// If there are no smileys defined, no need to replace anything
+	if (empty($smileyPregReplacements))
+		return;
+
 	// Replace away!
-	$message = preg_replace_callback($smileyPregSearch, function($matches) use ($smileyPregReplacements)
+	$message = preg_replace_callback(
+		$smileyPregSearch,
+		function($matches) use ($smileyPregReplacements)
 		{
 			return $smileyPregReplacements[$matches[1]];
-		}, $message);
+		},
+		$message
+	);
 }
 
 /**
@@ -3338,14 +3850,14 @@ function get_proxied_url($url)
 	if (empty($image_proxy_enabled) || !empty($user_info['possibly_robot']))
 		return $url;
 
-	$parsedurl = parse_url($url);
+	$parsedurl = parse_iri($url);
 
 	// Don't bother with HTTPS URLs, schemeless URLs, or obviously invalid URLs
 	if (empty($parsedurl['scheme']) || empty($parsedurl['host']) || empty($parsedurl['path']) || $parsedurl['scheme'] === 'https')
 		return $url;
 
 	// We don't need to proxy our own resources
-	if ($parsedurl['host'] === parse_url($boardurl, PHP_URL_HOST))
+	if ($parsedurl['host'] === parse_iri($boardurl, PHP_URL_HOST))
 		return strtr($url, array('http://' => 'https://'));
 
 	// By default, use SMF's own image proxy script
@@ -3390,17 +3902,23 @@ function redirectexit($setLocation = '', $refresh = false, $permanent = false)
 	if (!empty($modSettings['queryless_urls']) && (empty($context['server']['is_cgi']) || ini_get('cgi.fix_pathinfo') == 1 || @get_cfg_var('cgi.fix_pathinfo') == 1) && (!empty($context['server']['is_apache']) || !empty($context['server']['is_lighttpd']) || !empty($context['server']['is_litespeed'])))
 	{
 		if (defined('SID') && SID != '')
-			$setLocation = preg_replace_callback('~^' . preg_quote($scripturl, '~') . '\?(?:' . SID . '(?:;|&|&amp;))((?:board|topic)=[^#]+?)(#[^"]*?)?$~',
+			$setLocation = preg_replace_callback(
+				'~^' . preg_quote($scripturl, '~') . '\?(?:' . SID . '(?:;|&|&amp;))((?:board|topic)=[^#]+?)(#[^"]*?)?$~',
 				function($m) use ($scripturl)
 				{
 					return $scripturl . '/' . strtr("$m[1]", '&;=', '//,') . '.html?' . SID . (isset($m[2]) ? "$m[2]" : "");
-				}, $setLocation);
+				},
+				$setLocation
+			);
 		else
-			$setLocation = preg_replace_callback('~^' . preg_quote($scripturl, '~') . '\?((?:board|topic)=[^#"]+?)(#[^"]*?)?$~',
+			$setLocation = preg_replace_callback(
+				'~^' . preg_quote($scripturl, '~') . '\?((?:board|topic)=[^#"]+?)(#[^"]*?)?$~',
 				function($m) use ($scripturl)
 				{
 					return $scripturl . '/' . strtr("$m[1]", '&;=', '//,') . '.html' . (isset($m[2]) ? "$m[2]" : "");
-				}, $setLocation);
+				},
+				$setLocation
+			);
 	}
 
 	// Maybe integrations want to change where we are heading?
@@ -3454,7 +3972,7 @@ function obExit($header = null, $do_footer = null, $from_index = false, $from_fa
 	{
 		// Was the page title set last minute? Also update the HTML safe one.
 		if (!empty($context['page_title']) && empty($context['page_title_html_safe']))
-			$context['page_title_html_safe'] = $smcFunc['htmlspecialchars'](un_htmlspecialchars($context['page_title'])) . (!empty($context['current_page']) ? ' - ' . $txt['page'] . ' ' . ($context['current_page'] + 1) : '');
+			$context['page_title_html_safe'] = $smcFunc['htmlspecialchars'](html_entity_decode($context['page_title'])) . (!empty($context['current_page']) ? ' - ' . $txt['page'] . ' ' . ($context['current_page'] + 1) : '');
 
 		// Start up the session URL fixer.
 		ob_start('ob_sessrewrite');
@@ -3653,31 +4171,11 @@ function setupThemeContext($forceload = false)
 		if (allowedTo('moderate_forum'))
 			$context['unapproved_members'] = !empty($modSettings['unapprovedMembers']) ? $modSettings['unapprovedMembers'] : 0;
 
-		$context['user']['avatar'] = array();
-
-		// Check for gravatar first since we might be forcing them...
-		if (!empty($modSettings['gravatarEnabled']) && (substr($user_info['avatar']['url'], 0, 11) == 'gravatar://' || !empty($modSettings['gravatarOverride'])))
-		{
-			if (!empty($modSettings['gravatarAllowExtraEmail']) && stristr($user_info['avatar']['url'], 'gravatar://') && strlen($user_info['avatar']['url']) > 11)
-				$context['user']['avatar']['href'] = get_gravatar_url($smcFunc['substr']($user_info['avatar']['url'], 11));
-			else
-				$context['user']['avatar']['href'] = get_gravatar_url($user_info['email']);
-		}
-		// Uploaded?
-		elseif ($user_info['avatar']['url'] == '' && !empty($user_info['avatar']['id_attach']))
-			$context['user']['avatar']['href'] = $user_info['avatar']['custom_dir'] ? $modSettings['custom_avatar_url'] . '/' . $user_info['avatar']['filename'] : $scripturl . '?action=dlattach;attach=' . $user_info['avatar']['id_attach'] . ';type=avatar';
-		// Full URL?
-		elseif (strpos($user_info['avatar']['url'], 'http://') === 0 || strpos($user_info['avatar']['url'], 'https://') === 0)
-			$context['user']['avatar']['href'] = $user_info['avatar']['url'];
-		// Otherwise we assume it's server stored.
-		elseif ($user_info['avatar']['url'] != '')
-			$context['user']['avatar']['href'] = $modSettings['avatar_url'] . '/' . $smcFunc['htmlspecialchars']($user_info['avatar']['url']);
-		// No avatar at all? Fine, we have a big fat default avatar ;)
-		else
-			$context['user']['avatar']['href'] = $modSettings['avatar_url'] . '/default.png';
-
-		if (!empty($context['user']['avatar']))
-			$context['user']['avatar']['image'] = '<img src="' . $context['user']['avatar']['href'] . '" alt="" class="avatar">';
+		$context['user']['avatar'] = set_avatar_data(array(
+			'filename' => $user_info['avatar']['filename'],
+			'avatar' => $user_info['avatar']['url'],
+			'email' => $user_info['email'],
+		));
 
 		// Figure out how long they've been logged in.
 		$context['user']['total_time_logged_in'] = array(
@@ -3726,12 +4224,12 @@ function setupThemeContext($forceload = false)
 	// Now add the capping code for avatars.
 	if (!empty($modSettings['avatar_max_width_external']) && !empty($modSettings['avatar_max_height_external']) && !empty($modSettings['avatar_action_too_large']) && $modSettings['avatar_action_too_large'] == 'option_css_resize')
 		addInlineCss('
-	img.avatar { max-width: ' . $modSettings['avatar_max_width_external'] . 'px; max-height: ' . $modSettings['avatar_max_height_external'] . 'px; }');
+	img.avatar { max-width: ' . $modSettings['avatar_max_width_external'] . 'px !important; max-height: ' . $modSettings['avatar_max_height_external'] . 'px !important; }');
 
 	// Add max image limits
 	if (!empty($modSettings['max_image_width']))
 		addInlineCss('
-	.postarea .bbc_img, .list_posts .bbc_img, .post .inner .bbc_img, form#reported_posts .bbc_img, #preview_body .bbc_img { max-width: ' . $modSettings['max_image_width'] . 'px; }');
+	.postarea .bbc_img, .list_posts .bbc_img, .post .inner .bbc_img, form#reported_posts .bbc_img, #preview_body .bbc_img { max-width: min(100%,' . $modSettings['max_image_width'] . 'px); }');
 
 	if (!empty($modSettings['max_image_height']))
 		addInlineCss('
@@ -3759,7 +4257,7 @@ function setupThemeContext($forceload = false)
 		$context['page_title'] = '';
 
 	// Set some specific vars.
-	$context['page_title_html_safe'] = $smcFunc['htmlspecialchars'](un_htmlspecialchars($context['page_title'])) . (!empty($context['current_page']) ? ' - ' . $txt['page'] . ' ' . ($context['current_page'] + 1) : '');
+	$context['page_title_html_safe'] = $smcFunc['htmlspecialchars'](html_entity_decode($context['page_title'])) . (!empty($context['current_page']) ? ' - ' . $txt['page'] . ' ' . ($context['current_page'] + 1) : '');
 	$context['meta_keywords'] = !empty($modSettings['meta_keywords']) ? $smcFunc['htmlspecialchars']($modSettings['meta_keywords']) : '';
 
 	// Content related meta tags, including Open Graph
@@ -4057,16 +4555,13 @@ function template_javascript($do_deferred = false)
 
 		foreach ($context['javascript_vars'] as $key => $value)
 		{
-			if (empty($value))
-			{
-				echo '
-		var ', $key, ';';
-			}
-			else
-			{
-				echo '
-		var ', $key, ' = ', $value, ';';
-			}
+			if (!is_string($key) || is_numeric($key))
+				continue;
+
+			if (!is_string($value) && !is_numeric($value))
+				$value = null;
+
+			echo "\n\t\t", 'var ', $key, isset($value) ? ' = ' . $value : '', ';';
 		}
 
 		echo '
@@ -4179,10 +4674,14 @@ function template_css()
 	$toMinify = array();
 	$normal = array();
 
-	uasort($context['css_files'], function ($a, $b)
-	{
-		return $a['options']['order_pos'] < $b['options']['order_pos'] ? -1 : ($a['options']['order_pos'] > $b['options']['order_pos'] ? 1 : 0);
-	});
+	uasort(
+		$context['css_files'],
+		function ($a, $b)
+		{
+			return $a['options']['order_pos'] < $b['options']['order_pos'] ? -1 : ($a['options']['order_pos'] > $b['options']['order_pos'] ? 1 : 0);
+		}
+	);
+
 	foreach ($context['css_files'] as $id => $file)
 	{
 		// Last minute call! allow theme authors to disable single files.
@@ -4280,10 +4779,13 @@ function custMinify($data, $type)
 		return $data;
 
 	// Different pages include different files, so we use a hash to label the different combinations
-	$hash = md5(implode(' ', array_map(function($file)
-	{
-		return $file['filePath'] . '-' . $file['mtime'];
-	}, $data)));
+	$hash = md5(implode(' ', array_map(
+		function($file)
+		{
+			return $file['filePath'] . '-' . $file['mtime'];
+		},
+		$data
+	)));
 
 	// Is this a deferred or asynchronous JavaScript file?
 	$async = $type === 'js';
@@ -4896,10 +5398,6 @@ function setupMenuContext()
 			{
 				$button['active_button'] = false;
 
-				// This button needs some action.
-				if (isset($button['action_hook']))
-					$needs_action_hook = true;
-
 				// Make sure the last button truly is the last button.
 				if (!empty($button['is_last']))
 				{
@@ -5035,8 +5533,7 @@ function setupMenuContext()
 	}
 
 	// Not all actions are simple.
-	if (!empty($needs_action_hook))
-		call_integration_hook('integrate_current_action', array(&$current_action));
+	call_integration_hook('integrate_current_action', array(&$current_action));
 
 	if (isset($context['menu_buttons'][$current_action]))
 		$context['menu_buttons'][$current_action]['active_button'] = true;
@@ -5414,7 +5911,7 @@ function fetch_web_data($url, $post_data = '', $keep_alive = false, $redirection
 	global $webmaster_email, $sourcedir, $txt;
 	static $keep_alive_dom = null, $keep_alive_fp = null;
 
-	preg_match('~^(http|ftp)(s)?://([^/:]+)(:(\d+))?(.+)$~', $url, $match);
+	preg_match('~^(http|ftp)(s)?://([^/:]+)(:(\d+))?(.+)$~', iri_to_url($url), $match);
 
 	// No scheme? No data for you!
 	if (empty($match[1]))
@@ -6043,7 +6540,7 @@ function smf_list_timezones($when = 'now')
 		if (in_array($tzid, $priority_tzids))
 			$priority_zones[$tzkey] = true;
 
-		// Keep track of the location and offset for this tzid
+		// Keep track of the location for this tzid.
 		if (!empty($txt[$tzid]))
 			$zones[$tzkey]['locations'][] = $txt[$tzid];
 		else
@@ -6051,7 +6548,21 @@ function smf_list_timezones($when = 'now')
 			$tzid_parts = explode('/', $tzid);
 			$zones[$tzkey]['locations'][] = str_replace(array('St_', '_'), array('St. ', ' '), array_pop($tzid_parts));
 		}
+
+		// Keep track of the current offset for this tzid.
 		$offsets[$tzkey] = $tzinfo[0]['offset'];
+
+		// Keep track of the Standard Time offset for this tzid.
+		foreach ($tzinfo as $transition)
+		{
+			if (!$transition['isdst'])
+			{
+				$std_offsets[$tzkey] = $transition['offset'];
+				break;
+			}
+		}
+		if (!isset($std_offsets[$tzkey]))
+			$std_offsets[$tzkey] = $tzinfo[0]['offset'];
 
 		// Figure out the "meta-zone" info for the label
 		if (empty($zones[$tzkey]['metazone']) && isset($tzid_metazones[$tzid]))
@@ -6069,8 +6580,8 @@ function smf_list_timezones($when = 'now')
 			$event_tzkey = $tzkey;
 	}
 
-	// Sort by offset, then label, then DST type.
-	array_multisort($offsets, SORT_ASC, SORT_NUMERIC, $labels, SORT_ASC, $dst_types, SORT_ASC, $zones);
+	// Sort by current offset, then standard offset, then DST type, then label.
+	array_multisort($offsets, SORT_DESC, SORT_NUMERIC, $std_offsets, SORT_DESC, SORT_NUMERIC, $dst_types, SORT_ASC, $labels, SORT_ASC, $zones);
 
 	// Build the final array of formatted values
 	$priority_timezones = array();
@@ -6108,9 +6619,13 @@ function smf_list_timezones($when = 'now')
 			$desc = implode(', ', array_slice(array_unique($tzvalue['locations']), 0, 5)) . (count($tzvalue['locations']) > 5 ? ', ' . $txt['etc'] : '');
 
 		// We don't want abbreviations like '+03' or '-11'.
-		$abbrs = array_filter($tzvalue['abbrs'], function ($abbr) {
-			return !strspn($abbr, '+-');
-		});
+		$abbrs = array_filter(
+			$tzvalue['abbrs'],
+			function ($abbr)
+			{
+				return !strspn($abbr, '+-');
+			}
+		);
 		$abbrs = count($abbrs) == count($tzvalue['abbrs']) ? array_unique($abbrs) : array();
 
 		// Show the UTC offset and abbreviation(s).
@@ -6265,6 +6780,19 @@ function _safe_serialize($value)
 
 	if (is_array($value))
 	{
+		// Check for nested objects or resources.
+		$contains_invalid = false;
+		array_walk_recursive(
+			$value,
+			function($v) use (&$contains_invalid)
+			{
+				if (is_object($v) || is_resource($v))
+					$contains_invalid = true;
+			}
+		);
+		if ($contains_invalid)
+			return false;
+
 		$out = '';
 		foreach ($value as $k => $v)
 			$out .= _safe_serialize($k) . _safe_serialize($v);
@@ -6314,6 +6842,11 @@ function _safe_unserialize($str)
 	// Input  is not a string.
 	if (empty($str) || !is_string($str))
 		return false;
+
+	// The substring 'O:' is used to serialize objects.
+	// If it is not present, then there are none in the serialized data.
+	if (strpos($str, 'O:') === false)
+		return unserialize($str);
 
 	$stack = array();
 	$expected = array();
@@ -6689,22 +7222,24 @@ function set_tld_regex($update = false)
 	if (!empty($tlds))
 	{
 		// Clean $tlds and convert it to an array
-		$tlds = array_filter(explode("\n", strtolower($tlds)), function($line)
-		{
-			$line = trim($line);
-			if (empty($line) || strlen($line) != strspn($line, 'abcdefghijklmnopqrstuvwxyz0123456789-'))
-				return false;
-			else
-				return true;
-		});
+		$tlds = array_filter(
+			explode("\n", strtolower($tlds)),
+			function($line)
+			{
+				$line = trim($line);
+				if (empty($line) || strlen($line) != strspn($line, 'abcdefghijklmnopqrstuvwxyz0123456789-'))
+					return false;
+				else
+					return true;
+			}
+		);
 
 		// Convert Punycode to Unicode
-		require_once($sourcedir . '/Class-Punycode.php');
-		$Punycode = new Punycode();
-		$tlds = array_map(function($input) use ($Punycode)
-		{
-			return $Punycode->decode($input);
-		}, $tlds);
+		if (!function_exists('idn_to_utf8'))
+			require_once($sourcedir . '/Subs-Compat.php');
+
+		foreach ($tlds as &$tld)
+			$tld = idn_to_utf8($tld, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46);
 	}
 	// Otherwise, use the 2012 list of gTLDs and ccTLDs for now and schedule a background update
 	else
@@ -6902,16 +7437,19 @@ function build_regex($strings, $delim = null, $returnArray = false)
 		}
 
 		// Sort by key length and then alphabetically
-		uksort($regex, function($k1, $k2) use (&$strlen)
-		{
-			$l1 = $strlen($k1);
-			$l2 = $strlen($k2);
+		uksort(
+			$regex,
+			function($k1, $k2) use (&$strlen)
+			{
+				$l1 = $strlen($k1);
+				$l2 = $strlen($k2);
 
-			if ($l1 == $l2)
-				return strcmp($k1, $k2) > 0 ? 1 : -1;
-			else
-				return $l1 > $l2 ? -1 : 1;
-		});
+				if ($l1 == $l2)
+					return strcmp($k1, $k2) > 0 ? 1 : -1;
+				else
+					return $l1 > $l2 ? -1 : 1;
+			}
+		);
 
 		$depth--;
 		return implode('|', $regex);
@@ -6955,7 +7493,7 @@ function ssl_cert_found($url)
 		return true;
 
 	// First, strip the subfolder from the passed url, if any
-	$parsedurl = parse_url($url);
+	$parsedurl = parse_iri($url);
 	$url = 'ssl://' . $parsedurl['host'] . ':443';
 
 	// Next, check the ssl stream context for certificate info
@@ -7130,6 +7668,38 @@ function httpsOn()
 }
 
 /**
+ * A wrapper for `parse_url($url)` that can handle URLs with international
+ * characters (a.k.a. IRIs)
+ *
+ * @param string $iri The IRI to parse.
+ * @param int $component Optional parameter to pass to parse_url().
+ * @return mixed Same as parse_url(), but with unmangled Unicode.
+ */
+function parse_iri($iri, $component = -1)
+{
+	$iri = preg_replace_callback(
+		'~[^\x00-\x7F\pZ\pC]|%~u',
+		function($matches)
+		{
+			return rawurlencode($matches[0]);
+		},
+		$iri
+	);
+
+	$parsed = parse_url($iri, $component);
+
+	if (is_array($parsed))
+	{
+		foreach ($parsed as &$part)
+			$part = rawurldecode($part);
+	}
+	elseif (is_string($parsed))
+		$parsed = rawurldecode($parsed);
+
+	return $parsed;
+}
+
+/**
  * A wrapper for `filter_var($url, FILTER_VALIDATE_URL)` that can handle URLs
  * with international characters (a.k.a. IRIs)
  *
@@ -7140,6 +7710,15 @@ function httpsOn()
 function validate_iri($iri, $flags = null)
 {
 	$url = iri_to_url($iri);
+
+	// PHP 5 doesn't recognize IPv6 addresses in the URL host.
+	if (version_compare(phpversion(), '7.0.0', '<'))
+	{
+		$host = parse_url((strpos($url, '//') === 0 ? 'http:' : '') . $url, PHP_URL_HOST);
+
+		if (strpos($host, '[') === 0 && strpos($host, ']') === strlen($host) - 1 && strpos($host, ':') !== false)
+			$url = str_replace($host, '127.0.0.1', $url);
+	}
 
 	if (filter_var($url, FILTER_VALIDATE_URL, $flags) !== false)
 		return $iri;
@@ -7160,10 +7739,15 @@ function validate_iri($iri, $flags = null)
 function sanitize_iri($iri)
 {
 	// Encode any non-ASCII characters (but not space or control characters of any sort)
-	$iri = preg_replace_callback('~[^\x00-\x7F\pZ\pC]~u', function($matches)
-	{
-		return rawurlencode($matches[0]);
-	}, $iri);
+	// Also encode '%' in order to preserve anything that is already percent-encoded.
+	$iri = preg_replace_callback(
+		'~[^\x00-\x7F\pZ\pC]|%~u',
+		function($matches)
+		{
+			return rawurlencode($matches[0]);
+		},
+		$iri
+	);
 
 	// Perform normal sanitization
 	$iri = filter_var($iri, FILTER_SANITIZE_URL);
@@ -7172,6 +7756,47 @@ function sanitize_iri($iri)
 	$iri = rawurldecode($iri);
 
 	return $iri;
+}
+
+/**
+ * Performs Unicode normalization on IRIs.
+ *
+ * Internally calls sanitize_iri(), then performs Unicode normalization on the
+ * IRI as a whole, using NFKC normalization for the domain name (see RFC 3491)
+ * and NFC normalization for the rest.
+ *
+ * @param string $iri The IRI to normalize.
+ * @return string|bool The normalized version of the IRI.
+ */
+function normalize_iri($iri)
+{
+	global $sourcedir, $context, $txt, $db_character_set;
+
+	// If we are not using UTF-8, just sanitize and return.
+	if (isset($context['utf8']) ? !$context['utf8'] : (isset($txt['lang_character_set']) ? $txt['lang_character_set'] != 'UTF-8' : (isset($db_character_set) && $db_character_set != 'utf8')))
+		return sanitize_iri($iri);
+
+	require_once($sourcedir . '/Subs-Charset.php');
+
+	$iri = sanitize_iri(utf8_normalize_c($iri));
+
+	$host = parse_iri((strpos($iri, '//') === 0 ? 'http:' : '') . $iri, PHP_URL_HOST);
+
+	if (!empty($host))
+	{
+		$normalized_host = utf8_normalize_kc_casefold($host);
+		$pos = strpos($iri, $host);
+	}
+	else
+	{
+		$normalized_host = '';
+		$pos = 0;
+	}
+
+	$before_host = substr($iri, 0, $pos);
+	$after_host = substr($iri, $pos + strlen($host));
+
+	return $before_host . $normalized_host . $after_host;
 }
 
 /**
@@ -7185,19 +7810,36 @@ function sanitize_iri($iri)
  */
 function iri_to_url($iri)
 {
-	global $sourcedir;
+	global $sourcedir, $context, $txt, $db_character_set;
 
-	$host = parse_url((strpos($iri, '://') === false ? 'http://' : '') . ltrim($iri, ':/'), PHP_URL_HOST);
-
-	if (empty($host))
+	// Sanity check: must be using UTF-8 to do this.
+	if (isset($context['utf8']) ? !$context['utf8'] : (isset($txt['lang_character_set']) ? $txt['lang_character_set'] != 'UTF-8' : (isset($db_character_set) && $db_character_set != 'utf8')))
 		return $iri;
 
-	// Convert the domain using the Punycode algorithm
-	require_once($sourcedir . '/Class-Punycode.php');
-	$Punycode = new Punycode();
-	$encoded_host = $Punycode->encode($host);
-	$pos = strpos($iri, $host);
-	$iri = substr_replace($iri, $encoded_host, $pos, strlen($host));
+	require_once($sourcedir . '/Subs-Charset.php');
+
+	$iri = sanitize_iri(utf8_normalize_c($iri));
+
+	$host = parse_iri((strpos($iri, '//') === 0 ? 'http:' : '') . $iri, PHP_URL_HOST);
+
+	if (!empty($host))
+	{
+		if (!function_exists('idn_to_ascii'))
+			require_once($sourcedir . '/Subs-Compat.php');
+
+		// Convert the host using the Punycode algorithm
+		$encoded_host = idn_to_ascii($host, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46);
+
+		$pos = strpos($iri, $host);
+	}
+	else
+	{
+		$encoded_host = '';
+		$pos = 0;
+	}
+
+	$before_host = substr($iri, 0, $pos);
+	$after_host = substr($iri, $pos + strlen($host));
 
 	// Encode any disallowed characters in the rest of the URL
 	$unescaped = array(
@@ -7207,9 +7849,11 @@ function iri_to_url($iri)
 		'%3B' => ';', '%3D' => '=', '%3F' => '?', '%40' => '@',
 		'%25' => '%',
 	);
-	$iri = strtr(rawurlencode($iri), $unescaped);
 
-	return $iri;
+	$before_host = strtr(rawurlencode($before_host), $unescaped);
+	$after_host = strtr(rawurlencode($after_host), $unescaped);
+
+	return $before_host . $encoded_host . $after_host;
 }
 
 /**
@@ -7223,24 +7867,46 @@ function iri_to_url($iri)
  */
 function url_to_iri($url)
 {
-	global $sourcedir;
+	global $sourcedir, $context, $txt, $db_character_set;
 
-	$host = parse_url((strpos($url, '://') === false ? 'http://' : '') . ltrim($url, ':/'), PHP_URL_HOST);
-
-	if (empty($host))
+	// Sanity check: must be using UTF-8 to do this.
+	if (isset($context['utf8']) ? !$context['utf8'] : (isset($txt['lang_character_set']) ? $txt['lang_character_set'] != 'UTF-8' : (isset($db_character_set) && $db_character_set != 'utf8')))
 		return $url;
 
-	// Decode the domain from Punycode
-	require_once($sourcedir . '/Class-Punycode.php');
-	$Punycode = new Punycode();
-	$decoded_host = $Punycode->decode($host);
-	$pos = strpos($url, $host);
-	$url = substr_replace($url, $decoded_host, $pos, strlen($host));
+	$host = parse_iri((strpos($url, '//') === 0 ? 'http:' : '') . $url, PHP_URL_HOST);
 
-	// Decode the rest of the URL
-	$url = rawurldecode($url);
+	if (!empty($host))
+	{
+		if (!function_exists('idn_to_utf8'))
+			require_once($sourcedir . '/Subs-Compat.php');
 
-	return $url;
+		// Decode the domain from Punycode
+		$decoded_host = idn_to_utf8($host, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46);
+
+		$pos = strpos($url, $host);
+	}
+	else
+	{
+		$decoded_host = '';
+		$pos = 0;
+	}
+
+	$before_host = substr($url, 0, $pos);
+	$after_host = substr($url, $pos + strlen($host));
+
+	// Decode the rest of the URL, but preserve escaped URL syntax characters.
+	$double_escaped = array(
+		'%21' => '%2521', '%23' => '%2523', '%24' => '%2524', '%26' => '%2526',
+		'%27' => '%2527', '%28' => '%2528', '%29' => '%2529', '%2A' => '%252A',
+		'%2B' => '%252B', '%2C' => '%252C', '%2F' => '%252F', '%3A' => '%253A',
+		'%3B' => '%253B', '%3D' => '%253D', '%3F' => '%253F', '%40' => '%2540',
+		'%25' => '%2525',
+	);
+
+	$before_host = rawurldecode(strtr($before_host, $double_escaped));
+	$after_host = rawurldecode(strtr($after_host, $double_escaped));
+
+	return $before_host . $decoded_host . $after_host;
 }
 
 /**
@@ -7289,6 +7955,8 @@ function check_cron()
  */
 function send_http_status($code, $status = '')
 {
+	global $sourcedir;
+
 	$statuses = array(
 		204 => 'No Content',
 		206 => 'Partial Content',
@@ -7304,6 +7972,7 @@ function send_http_status($code, $status = '')
 	$protocol = preg_match('~^\s*(HTTP/[12]\.\d)\s*$~i', $_SERVER['SERVER_PROTOCOL'], $matches) ? $matches[1] : 'HTTP/1.0';
 
 	// Typically during these requests, we have cleaned the response (ob_*clean), ensure these headers exist.
+	require_once($sourcedir . '/Security.php');
 	frameOptionsHeader();
 	corsPolicyHeader();
 
@@ -7539,6 +8208,26 @@ function JavaScriptEscape($string)
 		'<a href' => '<a hr\'+\'ef',
 		$scripturl => '\' + smf_scripturl + \'',
 	)) . '\'';
+}
+
+function tokenTxtReplace($stringSubject = '')
+{
+	global $txt;
+
+	if (empty($stringSubject))
+		return '';
+
+	$translatable_tokens = preg_match_all('/{(.*?)}/' , $stringSubject, $matches);
+	$toFind = array();
+	$replaceWith = array();
+
+	if (!empty($matches[1]))
+		foreach ($matches[1] as $token) {
+			$toFind[] = '{' . $token . '}';
+			$replaceWith[] = isset($txt[$token]) ? $txt[$token] : $token;
+		}
+
+	return str_replace($toFind, $replaceWith, $stringSubject);
 }
 
 ?>

@@ -8,17 +8,17 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 // Version information...
-define('SMF_VERSION', '2.1 RC3');
+define('SMF_VERSION', '2.1 RC4');
 define('SMF_FULL_VERSION', 'SMF ' . SMF_VERSION);
 define('SMF_SOFTWARE_YEAR', '2021');
-define('SMF_LANG_VERSION', '2.1 RC3');
+define('SMF_LANG_VERSION', '2.1 RC4');
 define('SMF_INSTALLING', 1);
 
-define('JQUERY_VERSION', '3.5.1');
+define('JQUERY_VERSION', '3.6.0');
 define('POSTGRE_TITLE', 'PostgreSQL');
 define('MYSQL_TITLE', 'MySQL');
 define('SMF_USER_AGENT', 'Mozilla/5.0 (' . php_uname('s') . ' ' . php_uname('m') . ') AppleWebKit/605.1.15 (KHTML, like Gecko)  SMF/' . strtr(SMF_VERSION, ' ', '.'));
@@ -30,7 +30,7 @@ if (!defined('TIME_START'))
  *
  * @var string
  */
-$GLOBALS['required_php_version'] = '5.6.0';
+$GLOBALS['required_php_version'] = '7.0.0';
 
 /**
  * A list of supported database systems.
@@ -40,17 +40,24 @@ $GLOBALS['required_php_version'] = '5.6.0';
 $databases = array(
 	'mysql' => array(
 		'name' => 'MySQL',
-		'version' => '5.0.22',
-		'version_check' => 'global $db_connection; return min(mysqli_get_server_info($db_connection), mysqli_get_client_info());',
-		'utf8_support' => true,
-		'utf8_version' => '5.0.22',
-		'utf8_version_check' => 'global $db_connection; return mysqli_get_server_info($db_connection);',
+		'version' => '5.6.0',
+		'version_check' => function() {
+			global $db_connection;
+			if (!function_exists('mysqli_fetch_row'))
+				return false;
+			return mysqli_fetch_row(mysqli_query($db_connection, 'SELECT VERSION();'))[0];
+		},
 		'alter_support' => true,
 	),
 	'postgresql' => array(
 		'name' => 'PostgreSQL',
 		'version' => '9.6',
-		'version_check' => '$version = pg_version(); return $version[\'client\'];',
+		'version_check' => function() {
+			if (!function_exists('pg_version'))
+				return false;
+			$version = pg_version();
+			return $version['client'];
+		},
 		'always_has_db' => true,
 	),
 );
@@ -714,6 +721,23 @@ function loadEssentialData()
 
 	$utf8 = (empty($modSettings['global_character_set']) ? $txt['lang_character_set'] : $modSettings['global_character_set']) === 'UTF-8';
 
+	$smcFunc['normalize'] = function($string, $form = 'c') use ($utf8)
+	{
+		global $sourcedir;
+
+		if (!$utf8)
+			return $string;
+
+		require_once($sourcedir . '/Subs-Charset.php');
+
+		$normalize_func = 'utf8_normalize_' . strtolower((string) $form);
+
+		if (!function_exists($normalize_func))
+			return false;
+
+		return $normalize_func($string);
+	};
+
 	// Get the database going!
 	if (empty($db_type) || $db_type == 'mysqli')
 	{
@@ -1002,9 +1026,9 @@ function WelcomeLogin()
 	// We're going to check that their board dir setting is right in case they've been moving stuff around.
 	if (strtr($boarddir, array('/' => '', '\\' => '')) != strtr($upgrade_path, array('/' => '', '\\' => '')))
 		$upcontext['warning'] = '
-			' . sprintf($txt['upgrade_boarddir_settings'], $boarddir, $upgrade_path) . '<br>
+			' . sprintf($txt['upgrade_forumdir_settings'], $boarddir, $upgrade_path) . '<br>
 			<ul>
-				<li>' . $txt['upgrade_boarddir'] . '  ' . $boarddir . '</li>
+				<li>' . $txt['upgrade_forumdir'] . '  ' . $boarddir . '</li>
 				<li>' . $txt['upgrade_sourcedir'] . '  ' . $boarddir . '</li>
 				<li>' . $txt['upgrade_cachedir'] . '  ' . $cachedir_temp . '</li>
 			</ul>
@@ -1945,7 +1969,7 @@ function db_version_check()
 {
 	global $db_type, $databases;
 
-	$curver = eval($databases[$db_type]['version_check']);
+	$curver = $databases[$db_type]['version_check']();
 	$curver = preg_replace('~\-.+?$~', '', $curver);
 
 	return version_compare($databases[$db_type]['version'], $curver, '<=');
@@ -2021,8 +2045,7 @@ function parse_sql($filename)
 	$last_step = '';
 
 	// Make sure all newly created tables will have the proper characters set; this approach is used throughout upgrade_2-1_mysql.php
-	if (isset($db_character_set) && $db_character_set === 'utf8')
-		$lines = str_replace(') ENGINE=MyISAM;', ') ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;', $lines);
+	$lines = str_replace(') ENGINE=MyISAM;', ') ENGINE=MyISAM DEFAULT CHARSET=utf8 COLLATE=utf8_general_ci;', $lines);
 
 	// Count the total number of steps within this file - for progress.
 	$file_steps = substr_count(implode('', $lines), '---#');
@@ -2542,7 +2565,7 @@ function checkChange(&$change)
 	// Attempt to find a database_version.
 	if (empty($database_version))
 	{
-		$database_version = $databases[$db_type]['version_check'];
+		$database_version = $databases[$db_type]['version_check']();
 		$where_field_support = $db_type == 'mysql' && version_compare('5.0', $database_version, '<=');
 	}
 
@@ -3362,27 +3385,53 @@ function ConvertUtf8()
 }
 
 /**
- * Attempts to repair corrupted serialized data strings
+ * Wrapper for unserialize that attempts to repair corrupted serialized data strings
  *
- * @param string $string Serialized data that has been corrupted
- * @return string|bool A working version of the serialized data, or the original if the repair failed
+ * @param string $string Serialized data that may or may not have been corrupted
+ * @return string|bool The unserialized data, or false if the repair failed
  */
-function fix_serialized_data($string)
+function upgrade_unserialize($string)
 {
-	// If its not broken, don't fix it.
-	if (!is_string($string) || !preg_match('/^[bidsa]:/', $string) || @safe_unserialize($string) !== false)
-		return $string;
+	if (!is_string($string))
+	{
+		$data = false;
+	}
+	// Might be JSON already.
+	elseif (strpos($string, '{') === 0)
+	{
+		$data = @json_decode($string, true);
 
-	// This bit fixes incorrect string lengths, which can happen if the character encoding was changed (e.g. conversion to UTF-8)
-	$new_string = preg_replace_callback('~\bs:(\d+):"(.*?)";(?=$|[bidsa]:|[{}]|N;)~s', function ($matches) {return 's:' . strlen($matches[2]) . ':"' . $matches[2] . '";';}, $string);
+		if (is_null($data))
+			$data = false;
+	}
+	elseif (in_array(substr($string, 0, 2), array('b:', 'i:', 'd:', 's:', 'a:', 'N;')))
+	{
+		$data = @safe_unserialize($string);
 
-	// @todo Add more possible fixes here. For example, fix incorrect array lengths, try to handle truncated strings gracefully, etc.
+		// The serialized data is broken.
+		if ($data === false)
+		{
+			// This bit fixes incorrect string lengths, which can happen if the character encoding was changed (e.g. conversion to UTF-8)
+			$new_string = preg_replace_callback(
+				'~\bs:(\d+):"(.*?)";(?=$|[bidsaO]:|[{}}]|N;)~s',
+				function ($matches)
+				{
+					return 's:' . strlen($matches[2]) . ':"' . $matches[2] . '";';
+				},
+				$string
+			);
 
-	// Did it work?
-	if (@safe_unserialize($new_string) !== false)
-		return $new_string;
+			// @todo Add more possible fixes here. For example, fix incorrect array lengths, try to handle truncated strings gracefully, etc.
+
+			// Did it work?
+			$data = @safe_unserialize($string);
+		}
+	}
+	// Just a plain string, then.
 	else
-		return $string;
+		$data = false;
+
+	return $data;
 }
 
 function serialize_to_json()
@@ -3399,9 +3448,16 @@ function serialize_to_json()
 			return true;
 	}
 
+	// Needed when writing settings
+	if (!function_exists('cache_put_data'))
+		require_once($sourcedir . '/Load.php');
+
 	// Done it already - js wise?
 	if (!empty($_POST['json_done']))
+	{
+		updateSettings(array('json_done' => true));
 		return true;
+	}
 
 	// List of tables affected by this function
 	// name => array('key', col1[,col2|true[,col3]])
@@ -3486,10 +3542,7 @@ function serialize_to_json()
 					if (isset($modSettings[$var]))
 					{
 						// Attempt to unserialize the setting
-						$temp = @safe_unserialize($modSettings[$var]);
-						// Maybe conversion to UTF-8 corrupted it
-						if ($temp === false)
-							$temp = @safe_unserialize(fix_serialized_data($modSettings[$var]));
+						$temp = upgrade_unserialize($modSettings[$var]);
 
 						if (!$temp && $command_line)
 							echo "\n - Failed to unserialize the '" . $var . "' setting. Skipping.";
@@ -3499,8 +3552,6 @@ function serialize_to_json()
 				}
 
 				// Update everything at once
-				if (!function_exists('cache_put_data'))
-					require_once($sourcedir . '/Load.php');
 				updateSettings($new_settings, true);
 
 				if ($command_line)
@@ -3521,9 +3572,7 @@ function serialize_to_json()
 				{
 					while ($row = $smcFunc['db_fetch_assoc']($query))
 					{
-						$temp = @safe_unserialize($row['value']);
-						if ($temp === false)
-							$temp = @safe_unserialize(fix_serialized_data($row['value']));
+						$temp = upgrade_unserialize($row['value']);
 
 						if ($command_line)
 						{
@@ -3600,18 +3649,10 @@ function serialize_to_json()
 						{
 							if ($col !== true && $row[$col] != '')
 							{
-								$temp = @safe_unserialize($row[$col]);
-
-								// Maybe we can fix the data?
-								if ($temp === false)
-									$temp = @safe_unserialize(fix_serialized_data($row[$col]));
-
-								// Maybe the data is already JSON?
-								if ($temp === false)
-									$temp = smf_json_decode($row[$col], true, false);
+								$temp = upgrade_unserialize($row[$col]);
 
 								// Oh well...
-								if ($temp === null)
+								if ($temp === false)
 								{
 									$temp = array();
 
@@ -3809,12 +3850,13 @@ function template_upgrade_above()
 	<link rel="stylesheet" href="', $settings['default_theme_url'], '/css/index.css">
 	<link rel="stylesheet" href="', $settings['default_theme_url'], '/css/install.css">
 	', $txt['lang_rtl'] == true ? '<link rel="stylesheet" href="' . $settings['default_theme_url'] . '/css/rtl.css">' : '', '
-	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.4/jquery.min.js"></script>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/', JQUERY_VERSION, '/jquery.min.js"></script>
 	<script src="', $settings['default_theme_url'], '/scripts/script.js"></script>
 	<script>
 		var smf_scripturl = \'', $upgradeurl, '\';
 		var smf_charset = \'', (empty($modSettings['global_character_set']) ? (empty($txt['lang_character_set']) ? 'UTF-8' : $txt['lang_character_set']) : $modSettings['global_character_set']), '\';
 		var startPercent = ', $upcontext['overall_percent'], ';
+		var allow_xhjr_credentials = false;
 
 		// This function dynamically updates the step progress bar - and overall one as required.
 		function updateStepProgress(current, max, overall_weight)
@@ -4976,13 +5018,13 @@ function template_upgrade_complete()
 /**
  * Convert MySQL (var)char ip col to binary
  *
+ * newCol needs to be a varbinary(16) null able field
+ *
  * @param string $targetTable The table to perform the operation on
  * @param string $oldCol The old column to gather data from
  * @param string $newCol The new column to put data in
  * @param int $limit The amount of entries to handle at once.
  * @param int $setSize The amount of entries after which to update the database.
- *
- * newCol needs to be a varbinary(16) null able field
  * @return bool
  */
 function MySQLConvertOldIp($targetTable, $oldCol, $newCol, $limit = 50000, $setSize = 100)
@@ -5057,7 +5099,7 @@ function MySQLConvertOldIp($targetTable, $oldCol, $newCol, $limit = 50000, $setS
 		{
 			$arIp[$i] = trim($arIp[$i]);
 
-			if (empty($arIp[$i]))
+			if (!filter_var($arIp[$i], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_IPV6))
 				continue;
 
 			$updates['ip' . $i] = $arIp[$i];

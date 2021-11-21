@@ -10,7 +10,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -392,6 +392,9 @@ function EditSpider()
 	{
 		checkSession();
 		validateToken('admin-ses');
+
+		foreach (array('spider_name', 'spider_agent') as $key)
+			$_POST[$key] = trim($smcFunc['normalize']($_POST[$key]));
 
 		$ips = array();
 		// Check the IP range is valid.

@@ -10,7 +10,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -164,7 +164,7 @@ function ShowXmlFeed()
 		// Either the board specified doesn't exist or you have no access.
 		$num_boards = $smcFunc['db_num_rows']($request);
 		if ($num_boards == 0)
-			fatal_lang_error('no_board');
+			fatal_lang_error('no_board', false);
 
 		$total_posts = 0;
 		$boards = array();
@@ -199,7 +199,7 @@ function ShowXmlFeed()
 		);
 
 		if ($smcFunc['db_num_rows']($request) == 0)
-			fatal_lang_error('no_board');
+			fatal_lang_error('no_board', false);
 
 		list ($total_posts) = $smcFunc['db_fetch_row']($request);
 		$smcFunc['db_free_result']($request);
@@ -470,10 +470,13 @@ function buildXmlFeed($xml_format, $xml_data, $feed_meta, $subaction)
 
 		foreach ($xml_data as $item)
 		{
-			$link = array_filter($item['content'], function($e)
-			{
-				return ($e['tag'] == 'link');
-			});
+			$link = array_filter(
+				$item['content'],
+				function($e)
+				{
+					return ($e['tag'] == 'link');
+				}
+			);
 			$link = array_pop($link);
 
 			$context['feed']['header'] .= '
@@ -526,10 +529,14 @@ function fix_possible_url($val)
 	if (empty($modSettings['queryless_urls']) || ($context['server']['is_cgi'] && ini_get('cgi.fix_pathinfo') == 0 && @get_cfg_var('cgi.fix_pathinfo') == 0) || (!$context['server']['is_apache'] && !$context['server']['is_lighttpd']))
 		return $val;
 
-	$val = preg_replace_callback('~\b' . preg_quote($scripturl, '~') . '\?((?:board|topic)=[^#"]+)(#[^"]*)?$~', function($m) use ($scripturl)
-	{
-		return $scripturl . '/' . strtr("$m[1]", '&;=', '//,') . '.html' . (isset($m[2]) ? $m[2] : "");
-	}, $val);
+	$val = preg_replace_callback(
+		'~\b' . preg_quote($scripturl, '~') . '\?((?:board|topic)=[^#"]+)(#[^"]*)?$~',
+		function($m) use ($scripturl)
+		{
+			return $scripturl . '/' . strtr("$m[1]", '&;=', '//,') . '.html' . (isset($m[2]) ? $m[2] : "");
+		},
+		$val
+	);
 	return $val;
 }
 
@@ -708,7 +715,7 @@ function getXmlMembers($xml_format, $ascending = false)
 		$row = filter_var($row, FILTER_CALLBACK, array('options' => 'cleanXml'));
 
 		// Create a GUID for each member using the tag URI scheme
-		$guid = 'tag:' . parse_url($scripturl, PHP_URL_HOST) . ',' . gmdate('Y-m-d', $row['date_registered']) . ':member=' . $row['id_member'];
+		$guid = 'tag:' . parse_iri($scripturl, PHP_URL_HOST) . ',' . gmdate('Y-m-d', $row['date_registered']) . ':member=' . $row['id_member'];
 
 		// Make the data look rss-ish.
 		if ($xml_format == 'rss' || $xml_format == 'rss2')
@@ -933,12 +940,16 @@ function getXmlNews($xml_format, $ascending = false)
 			// Sort the attachments by size to make things easier below
 			if (!empty($loaded_attachments))
 			{
-				uasort($loaded_attachments, function($a, $b)
-				{
-					if ($a['filesize'] == $b['filesize'])
-						return 0;
-					return ($a['filesize'] < $b['filesize']) ? -1 : 1;
-				});
+				uasort(
+					$loaded_attachments,
+					function($a, $b)
+					{
+						if ($a['filesize'] == $b['filesize'])
+							return 0;
+
+						return ($a['filesize'] < $b['filesize']) ? -1 : 1;
+					}
+				);
 			}
 			else
 				$loaded_attachments = null;
@@ -947,7 +958,7 @@ function getXmlNews($xml_format, $ascending = false)
 			$loaded_attachments = null;
 
 		// Create a GUID for this topic using the tag URI scheme
-		$guid = 'tag:' . parse_url($scripturl, PHP_URL_HOST) . ',' . gmdate('Y-m-d', $row['poster_time']) . ':topic=' . $row['id_topic'];
+		$guid = 'tag:' . parse_iri($scripturl, PHP_URL_HOST) . ',' . gmdate('Y-m-d', $row['poster_time']) . ':topic=' . $row['id_topic'];
 
 		// Being news, this actually makes sense in rss format.
 		if ($xml_format == 'rss' || $xml_format == 'rss2')
@@ -1290,7 +1301,8 @@ function getXmlRecent($xml_format)
 			WHERE ' . $query_this_board . (empty($optimize_msg) ? '' : '
 				AND {raw:optimize_msg}') . (empty($board) ? '' : '
 				AND m.id_board = {int:current_board}') . ($modSettings['postmod_active'] ? '
-				AND m.approved = {int:is_approved}' : '') . '
+				AND m.approved = {int:is_approved}
+				AND t.approved = {int:is_approved}' : '') . '
 			ORDER BY m.id_msg DESC
 			LIMIT {int:limit}',
 			array(
@@ -1388,13 +1400,16 @@ function getXmlRecent($xml_format)
 			// Sort the attachments by size to make things easier below
 			if (!empty($loaded_attachments))
 			{
-				uasort($loaded_attachments, function($a, $b)
-				{
-					if ($a['filesize'] == $b['filesize'])
-						return 0;
+				uasort(
+					$loaded_attachments,
+					function($a, $b)
+					{
+						if ($a['filesize'] == $b['filesize'])
+							return 0;
 
-					return ($a['filesize'] < $b['filesize']) ? -1 : 1;
-				});
+						return ($a['filesize'] < $b['filesize']) ? -1 : 1;
+					}
+				);
 			}
 			else
 				$loaded_attachments = null;
@@ -1403,7 +1418,7 @@ function getXmlRecent($xml_format)
 			$loaded_attachments = null;
 
 		// Create a GUID for this post using the tag URI scheme
-		$guid = 'tag:' . parse_url($scripturl, PHP_URL_HOST) . ',' . gmdate('Y-m-d', $row['poster_time']) . ':msg=' . $row['id_msg'];
+		$guid = 'tag:' . parse_iri($scripturl, PHP_URL_HOST) . ',' . gmdate('Y-m-d', $row['poster_time']) . ':msg=' . $row['id_msg'];
 
 		// Doesn't work as well as news, but it kinda does..
 		if ($xml_format == 'rss' || $xml_format == 'rss2')
@@ -1781,7 +1796,7 @@ function getXmlProfile($xml_format)
 	$profile = filter_var($profile, FILTER_CALLBACK, array('options' => 'cleanXml'));
 
 	// Create a GUID for this member using the tag URI scheme
-	$guid = 'tag:' . parse_url($scripturl, PHP_URL_HOST) . ',' . gmdate('Y-m-d', $profile['registered_timestamp']) . ':member=' . $profile['id'];
+	$guid = 'tag:' . parse_iri($scripturl, PHP_URL_HOST) . ',' . gmdate('Y-m-d', $profile['registered_timestamp']) . ':member=' . $profile['id'];
 
 	if ($xml_format == 'rss' || $xml_format == 'rss2')
 	{
@@ -1886,7 +1901,7 @@ function getXmlProfile($xml_format)
 						),
 						array(
 							'tag' => 'uri',
-							'content' => !empty($profile['website']['url']) ? $profile['website']['url'] : $scripturl . '?action=profile;u=' . $row['id_member'],
+							'content' => !empty($profile['website']['url']) ? $profile['website']['url'] : $scripturl . '?action=profile;u=' . $profile['id_member'],
 							'cdata' => !empty($profile['website']['url']),
 						),
 					),
@@ -2126,11 +2141,13 @@ function getXmlPosts($xml_format, $ascending = false)
 			m.id_msg, m.id_topic, m.id_board, m.id_member, m.poster_email, m.poster_ip,
 			m.poster_time, m.subject, m.modified_time, m.modified_name, m.modified_reason, m.body,
 			m.likes, m.approved, m.smileys_enabled
-		FROM {db_prefix}messages AS m
+		FROM {db_prefix}messages AS m' . ($modSettings['postmod_active'] && !$show_all ?'
+			INNER JOIN {db_prefix}topics AS t ON (t.id_topic = m.id_topic)' : '') . '
 		WHERE m.id_member = {int:uid}
 			AND m.id_msg > {int:start_after}
 			AND ' . $query_this_message_board . ($modSettings['postmod_active'] && !$show_all ? '
-			AND m.approved = {int:is_approved}' : '') . '
+			AND m.approved = {int:is_approved}
+			AND t.approved = {int:is_approved}' : '') . '
 		ORDER BY m.id_msg {raw:ascdesc}
 		LIMIT {int:limit}',
 		array(
@@ -2183,11 +2200,16 @@ function getXmlPosts($xml_format, $ascending = false)
 			// Sort the attachments by size to make things easier below
 			if (!empty($loaded_attachments))
 			{
-				uasort($loaded_attachments, function($a, $b) {
-					if ($a['filesize'] == $b['filesize'])
+				uasort(
+					$loaded_attachments,
+					function($a, $b)
+					{
+						if ($a['filesize'] == $b['filesize'])
 					        return 0;
-					return ($a['filesize'] < $b['filesize']) ? -1 : 1;
-				});
+
+						return ($a['filesize'] < $b['filesize']) ? -1 : 1;
+					}
+				);
 			}
 			else
 				$loaded_attachments = null;
@@ -2196,7 +2218,7 @@ function getXmlPosts($xml_format, $ascending = false)
 			$loaded_attachments = null;
 
 		// Create a GUID for this post using the tag URI scheme
-		$guid = 'tag:' . parse_url($scripturl, PHP_URL_HOST) . ',' . gmdate('Y-m-d', $row['poster_time']) . ':msg=' . $row['id_msg'];
+		$guid = 'tag:' . parse_iri($scripturl, PHP_URL_HOST) . ',' . gmdate('Y-m-d', $row['poster_time']) . ':msg=' . $row['id_msg'];
 
 		if ($xml_format == 'rss' || $xml_format == 'rss2')
 		{
@@ -2627,7 +2649,7 @@ function getXmlPMs($xml_format, $ascending = false)
 		$recipients = array_combine(explode(',', $row['id_members_to']), explode(',', $row['to_names']));
 
 		// Create a GUID for this post using the tag URI scheme
-		$guid = 'tag:' . parse_url($scripturl, PHP_URL_HOST) . ',' . gmdate('Y-m-d', $row['msgtime']) . ':pm=' . $row['id_pm'];
+		$guid = 'tag:' . parse_iri($scripturl, PHP_URL_HOST) . ',' . gmdate('Y-m-d', $row['msgtime']) . ':pm=' . $row['id_pm'];
 
 		if ($xml_format == 'rss' || $xml_format == 'rss2')
 		{

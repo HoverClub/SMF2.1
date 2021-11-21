@@ -12,7 +12,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -313,20 +313,17 @@ function Register2()
 		}
 	}
 
-	foreach ($_POST as $key => $value)
-	{
-		if (!is_array($_POST[$key]))
+	array_walk_recursive(
+		$_POST,
+		function (&$value, $key) use ($context, $smcFunc)
 		{
-			// For UTF-8, replace any kind of space with a normal space, and remove any kind of control character (incl. "\n" and "\r"), then trim.
-			if ($context['utf8'])
-				$_POST[$key] = $smcFunc['htmltrim'](preg_replace(array('~\p{Z}+~u', '~\p{C}+~u'), array(' ', ''), $_POST[$key]));
-			// Otherwise, just remove "\n" and "\r", then trim.
-			else
-				$_POST[$key] = $smcFunc['htmltrim'](str_replace(array("\n", "\r"), '', $_POST[$key]));
+			// Normalize Unicode characters. (Does nothing if not in UTF-8 mode.)
+			$value = $smcFunc['normalize']($value);
+
+			// Replace any kind of space or illegal character with a normal space, and then trim.
+			$value = $smcFunc['htmltrim'](normalize_spaces(sanitize_chars($value, 1, ' '), true, true, array('no_breaks' => true, 'replace_tabs' => true, 'collapse_hspace' => true)));
 		}
-		else
-			$_POST[$key] = htmltrim__recursive($_POST[$key]);
-	}
+	);
 
 	// Collect all extra registration fields someone might have filled in.
 	$possible_strings = array(
@@ -361,7 +358,7 @@ function Register2()
 
 			// Make sure their website URL is squeaky clean
 			if (isset($_POST['website_url']))
-				$_POST['website_url'] = (string) validate_iri(sanitize_iri($_POST['website_url']));
+				$_POST['website_url'] = (string) validate_iri(normalize_iri($_POST['website_url']));
 		}
 	}
 
@@ -436,7 +433,6 @@ function Register2()
 		'require' => !empty($modSettings['coppaAge']) && empty($_SESSION['skip_coppa']) ? 'coppa' : (empty($modSettings['registration_method']) ? 'nothing' : ($modSettings['registration_method'] == 1 ? 'activation' : 'approval')),
 		'extra_register_vars' => array(),
 		'theme_vars' => array(),
-		'timezone' => !empty($modSettings['default_timezone']) ? $modSettings['default_timezone'] : '',
 	);
 
 	// Include the additional options that might have been filled in.
@@ -912,7 +908,7 @@ function RegisterCheckUsername()
 	$context['valid_username'] = true;
 
 	// Clean it up like mother would.
-	$context['checked_username'] = preg_replace('~[\t\n\r \x0B\0' . ($context['utf8'] ? '\x{A0}\x{AD}\x{2000}-\x{200F}\x{201F}\x{202F}\x{3000}\x{FEFF}' : '\x00-\x08\x0B\x0C\x0E-\x19\xA0') . ']+~' . ($context['utf8'] ? 'u' : ''), ' ', $context['checked_username']);
+	$context['checked_username'] = trim(normalize_spaces(sanitize_chars($context['checked_username'], 1, ' '), true, true, array('no_breaks' => true, 'replace_tabs' => true, 'collapse_hspace' => true)));
 
 	require_once($sourcedir . '/Subs-Auth.php');
 	$errors = validateUsername(0, $context['checked_username'], true);

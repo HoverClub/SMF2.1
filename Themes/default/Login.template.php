@@ -7,7 +7,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 /**
@@ -105,7 +105,7 @@ function template_login()
 									"X-SMF-AJAX": 1
 								},
 								xhrFields: {
-									withCredentials: allow_xhjr_credentials
+									withCredentials: typeof allow_xhjr_credentials !== "undefined" ? allow_xhjr_credentials : false
 								},
 								data: form.serialize(),
 								success: function(data) {';
@@ -125,7 +125,7 @@ function template_login()
 			echo '
 									window.location.reload();';
 
-		echo '	
+		echo '
 								},
 								error: function(xhr) {
 									var data = xhr.responseText;

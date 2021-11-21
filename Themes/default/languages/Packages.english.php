@@ -1,5 +1,5 @@
 <?php
-// Version: 2.1 RC3; Packages
+// Version: 2.1 RC4; Packages
 
 $txt['package_proceed'] = 'Proceed';
 $txt['php_script'] = 'Modification file was extracted, but this modification also comes with a PHP script which should be executed before it will work';
@@ -26,7 +26,10 @@ $txt['install_modification'] = 'Install Mod';
 $txt['install_language'] = 'Add Language';
 $txt['install_avatar'] = 'Install Avatar Pack';
 $txt['install_unknown'] = 'Install Package';
-$txt['uninstall_mod'] = 'Uninstall Mod';
+$txt['uninstall_modification'] = 'Uninstall Mod';
+$txt['uninstall_language'] = 'Uninstall Language';
+$txt['uninstall_avatar'] = 'Uninstall Avatar Pack';
+$txt['uninstall_unknown'] = 'Uninstall Package';
 $txt['sql_file'] = 'The Modification file has been extracted. This modification also comes with a database file containing changes the database needs. You will need to execute this file for the modification to function properly.';
 $txt['sql_queries'] = 'SQL Queries';
 $txt['no_mods_installed'] = 'No mods currently installed';

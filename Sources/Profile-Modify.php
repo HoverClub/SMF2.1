@@ -12,7 +12,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -167,7 +167,7 @@ function loadProfileFields($force_reload = false)
 			'log_change' => true,
 			'permission' => 'profile_password',
 			'js_submit' => !empty($modSettings['send_validation_onChange']) ? '
-	form_handle.addEventListener(\'submit\', function(event)
+	form_handle.addEventListener("submit", function(event)
 	{
 		if (this.email_address.value != "' . (!empty($cur_profile['email_address']) ? $cur_profile['email_address'] : '') . '")
 		{
@@ -292,7 +292,7 @@ function loadProfileFields($force_reload = false)
 						resetPassword($context['id_member'], $value);
 					elseif ($value !== null)
 					{
-						validateUsername($context['id_member'], trim(preg_replace('~[\t\n\r \x0B\0' . ($context['utf8'] ? '\x{A0}\x{AD}\x{2000}-\x{200F}\x{201F}\x{202F}\x{3000}\x{FEFF}' : '\x00-\x08\x0B\x0C\x0E-\x19\xA0') . ']+~' . ($context['utf8'] ? 'u' : ''), ' ', $value)));
+						validateUsername($context['id_member'], trim(normalize_spaces(sanitize_chars($value, 1, ' '), true, true, array('no_breaks' => true, 'replace_tabs' => true, 'collapse_hspace' => true))));
 						updateMemberData($context['id_member'], array('member_name' => $value));
 
 						// Call this here so any integrated systems will know about the name change (resetPassword() takes care of this if we're letting SMF generate the password)
@@ -385,11 +385,15 @@ function loadProfileFields($force_reload = false)
 			'label' => $txt['profile_posts'],
 			'log_change' => true,
 			'size' => 7,
+			'min' => 0,
+			'max' => 2 ** 24 - 1,
 			'permission' => 'moderate_forum',
 			'input_validate' => function(&$value)
 			{
 				if (!is_numeric($value))
 					return 'digits_only';
+				elseif ($value < 0 || $value > 2 ** 24 - 1)
+					return 'posts_out_of_range';
 				else
 					$value = $value != '' ? strtr($value, array(',' => '', '.' => '', ' ' => '')) : 0;
 				return true;
@@ -405,7 +409,7 @@ function loadProfileFields($force_reload = false)
 			'enabled' => allowedTo('profile_displayed_name_own') || allowedTo('profile_displayed_name_any') || allowedTo('moderate_forum'),
 			'input_validate' => function(&$value) use ($context, $smcFunc, $sourcedir, $cur_profile)
 			{
-				$value = trim(preg_replace('~[\t\n\r \x0B\0' . ($context['utf8'] ? '\x{A0}\x{AD}\x{2000}-\x{200F}\x{201F}\x{202F}\x{3000}\x{FEFF}' : '\x00-\x08\x0B\x0C\x0E-\x19\xA0') . ']+~' . ($context['utf8'] ? 'u' : ''), ' ', $value));
+				$value = trim(normalize_spaces(sanitize_chars($value, 1, ' '), true, true, array('no_breaks' => true, 'replace_tabs' => true, 'collapse_hspace' => true)));
 
 				if (trim($value) == '')
 					return 'no_name';
@@ -649,7 +653,7 @@ function loadProfileFields($force_reload = false)
 					$value = 'http://' . $value;
 				if (strlen($value) < 8 || (substr($value, 0, 7) !== 'http://' && substr($value, 0, 8) !== 'https://'))
 					$value = '';
-				$value = (string) validate_iri(sanitize_iri($value));
+				$value = (string) validate_iri(normalize_iri($value));
 				return true;
 			},
 			'link_with' => 'website',
@@ -764,7 +768,7 @@ function setupProfileContext($fields)
 	var form_handle = document.forms.creator;
 	createEventListener(form_handle);
 	' . (!empty($context['require_password']) ? '
-	form_handle.addEventListener(\'submit\', function(event)
+	form_handle.addEventListener("submit", function(event)
 	{
 		if (this.oldpasswrd.value == "")
 		{
@@ -791,7 +795,7 @@ function setupProfileContext($fields)
  */
 function saveProfileFields()
 {
-	global $profile_fields, $profile_vars, $context, $old_profile, $post_errors, $cur_profile;
+	global $profile_fields, $profile_vars, $context, $old_profile, $post_errors, $cur_profile, $smcFunc;
 
 	// Load them up.
 	loadProfileFields();
@@ -812,6 +816,8 @@ function saveProfileFields()
 	{
 		if (!isset($_POST[$key]) || !empty($field['is_dummy']) || (isset($_POST['preview_signature']) && $key == 'signature'))
 			continue;
+
+		$_POST[$key] = sanitize_chars($smcFunc['normalize']($_POST[$key]), in_array($key, array('member_name', 'real_name')) ? 1 : 0);
 
 		// What gets updated?
 		$db_key = isset($field['save_key']) ? $field['save_key'] : $key;
@@ -1173,7 +1179,7 @@ function makeNotificationChanges($memID)
 			)
 		);
 		foreach ($_POST['notify_topics'] as $topic)
-			setNotifyPrefs($memID, array('topic_notify_' . $topic => 0));
+			setNotifyPrefs((int) $memID, array('topic_notify_' . $topic => 0));
 	}
 
 	// We are removing topic preferences
@@ -3139,7 +3145,7 @@ function profileLoadGroups()
  */
 function profileLoadSignatureData()
 {
-	global $modSettings, $context, $txt, $cur_profile, $memberContext;
+	global $modSettings, $context, $txt, $cur_profile, $memberContext, $smcFunc;
 
 	// Signature limits.
 	list ($sig_limits, $sig_bbc) = explode(':', $modSettings['signature_settings']);
@@ -3169,7 +3175,7 @@ function profileLoadSignatureData()
 		$context['member']['signature'] = empty($cur_profile['signature']) ? '' : str_replace(array('<br>', '<', '>', '"', '\''), array("\n", '&lt;', '&gt;', '&quot;', '&#039;'), $cur_profile['signature']);
 	else
 	{
-		$signature = !empty($_POST['signature']) ? $_POST['signature'] : '';
+		$signature = $_POST['signature'] = !empty($_POST['signature']) ? $smcFunc['normalize']($_POST['signature']) : '';
 		$validation = profileValidateSignature($signature);
 		if (empty($context['post_errors']))
 		{
@@ -3183,7 +3189,7 @@ function profileLoadSignatureData()
 		censorText($context['member']['signature']);
 		$context['member']['current_signature'] = $context['member']['signature'];
 		censorText($signature);
-		$context['member']['signature_preview'] = parse_bbc($signature, true, 'sig' . $memberContext[$context['id_member']]);
+		$context['member']['signature_preview'] = parse_bbc($signature, true, 'sig' . $memberContext[$context['id_member']], get_signature_allowed_bbc_tags());
 		$context['member']['signature'] = $_POST['signature'];
 	}
 
@@ -3407,7 +3413,7 @@ function profileSaveAvatarData(&$value)
 		if (!is_writable($uploadDir))
 			fatal_lang_error('attachments_no_write', 'critical');
 
-		$url = parse_url($_POST['userpicpersonal']);
+		$url = parse_iri($_POST['userpicpersonal']);
 		$contents = fetch_web_data($url['scheme'] . '://' . $url['host'] . (empty($url['port']) ? '' : ':' . $url['port']) . str_replace(' ', '%20', trim($url['path'])));
 
 		$new_filename = $uploadDir . '/' . getAttachmentFilename('avatar_tmp_' . $memID, false, null, true);

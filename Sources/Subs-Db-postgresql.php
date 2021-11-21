@@ -10,7 +10,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -78,8 +78,12 @@ function smf_db_initiate($db_server, $db_name, $db_user, $db_passwd, &$db_prefix
 	$db_passwd = str_replace(array('\\','\''), array('\\\\','\\\''), $db_passwd);
 
 	// Since pg_connect doesn't feed error info to pg_last_error, we have to catch issues with a try/catch.
-	set_error_handler(function($errno, $errstr) {
-		throw new ErrorException($errstr, $errno);});
+	set_error_handler(
+		function($errno, $errstr)
+		{
+			throw new ErrorException($errstr, $errno);
+		}
+	);
 	try
 	{
 		if (!empty($db_options['persist']))
@@ -256,7 +260,7 @@ function smf_db_replacement__callback($matches)
 			break;
 
 		case 'identifier':
-			return '"' . strtr($replacement, array('`' => '', '.' => '"."')) . '"';
+			return '"' . implode('"."', array_filter(explode('.', strtr($replacement, array('`' => ''))), 'strlen')) . '"';
 			break;
 
 		case 'raw':
@@ -700,7 +704,7 @@ function smf_db_insert($method, $table, $columns, $data, $keys, $returnmode = 0,
 			$replace = ' ON CONFLICT (' . $key_str . ') DO UPDATE SET ' . $col_str;
 		else
 			$replace = ' ON CONFLICT (' . $key_str . ') DO NOTHING';
-		
+
 	}
 
 	$returning = '';

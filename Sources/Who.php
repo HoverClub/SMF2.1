@@ -11,7 +11,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -37,6 +37,9 @@ function Who()
 	// You can't do anything if this is off.
 	if (empty($modSettings['who_enabled']))
 		fatal_lang_error('who_off', false);
+
+	// Discourage robots from indexing this page.
+	$context['robot_no_index'] = true;
 
 	// Load the 'Who' template.
 	loadTemplate('Who');
@@ -156,7 +159,7 @@ function Who()
 	while ($row = $smcFunc['db_fetch_assoc']($request))
 	{
 		$actions = $smcFunc['json_decode']($row['url'], true);
-		if ($actions === false)
+		if ($actions === array())
 			continue;
 
 		// Send the information to the template.
@@ -329,7 +332,7 @@ function determineActions($urls, $preferred_prefix = false)
 	{
 		// Get the request parameters..
 		$actions = $smcFunc['json_decode']($url[0], true);
-		if ($actions === false)
+		if ($actions === array())
 			continue;
 
 		// If it's the admin or moderation center, and there is an area set, use that instead.
@@ -577,6 +580,9 @@ function Credits($in_admin = false)
 	// Don't blink. Don't even blink. Blink and you're dead.
 	loadLanguage('Who');
 
+	// Discourage robots from indexing this page.
+	$context['robot_no_index'] = true;
+
 	if ($in_admin)
 	{
 		$context[$context['admin_menu_name']]['tab_data'] = array(
@@ -606,6 +612,7 @@ function Credits($in_admin = false)
 						// Developers
 						'Jessica "Suki" González',
 						'John "live627" Rayes',
+						'Oscar "Ozp" Rydhé',
 						'Shawn Bulen',
 
 						// Former Developers

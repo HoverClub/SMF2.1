@@ -10,7 +10,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -216,7 +216,7 @@ function EditHoliday()
 		validateToken('admin-eh');
 
 		// Not too long good sir?
-		$_REQUEST['title'] = $smcFunc['substr']($_REQUEST['title'], 0, 60);
+		$_REQUEST['title'] = $smcFunc['substr']($smcFunc['normalize']($_REQUEST['title']), 0, 60);
 		$_REQUEST['holiday'] = isset($_REQUEST['holiday']) ? (int) $_REQUEST['holiday'] : 0;
 
 		if (isset($_REQUEST['delete']))

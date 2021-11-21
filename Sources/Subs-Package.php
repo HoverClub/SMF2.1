@@ -13,7 +13,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -172,11 +172,11 @@ function read_tgz_data($gzfilename, $destination, $single_file = false, $overwri
 		$offset += $size;
 
 		// Not a directory and doesn't exist already...
-		if (substr($current['filename'], -1, 1) != '/' && !file_exists($destination . '/' . $current['filename']))
+		if (substr($current['filename'], -1, 1) != '/' && $destination !== null && !file_exists($destination . '/' . $current['filename']))
 			$write_this = true;
 		// File exists... check if it is newer.
 		elseif (substr($current['filename'], -1, 1) != '/')
-			$write_this = $overwrite || filemtime($destination . '/' . $current['filename']) < $current['mtime'];
+			$write_this = $overwrite || ($destination !== null && filemtime($destination . '/' . $current['filename']) < $current['mtime']);
 		// Folder... create.
 		elseif ($destination !== null && !$single_file)
 		{
@@ -256,17 +256,18 @@ function read_zip_file($file, $destination, $single_file = false, $overwrite = f
 				$file = $file . '.zip';
 
 		// Phar doesn't handle open_basedir restrictions very well and throws a PHP Warning. Ignore that.
-		set_error_handler(function($errno, $errstr, $errfile, $errline)
-		{
-			// error was suppressed with the @-operator
-			if (0 === error_reporting())
+		set_error_handler(
+			function($errno, $errstr, $errfile, $errline)
 			{
-				return false;
+				// error was suppressed with the @-operator
+				if (0 === error_reporting())
+					return false;
+
+				if (strpos($errstr, 'PharData::__construct(): open_basedir') === false)
+					log_error($errstr, 'general', $errfile, $errline);
+
+				return true;
 			}
-			if (strpos($errstr, 'PharData::__construct(): open_basedir') === false)
-				log_error($errstr, 'general', $errfile, $errline);
-			return true;
-		}
 		);
 		$archive = new PharData($file, RecursiveIteratorIterator::SELF_FIRST, null, Phar::ZIP);
 		restore_error_handler();
@@ -278,7 +279,7 @@ function read_zip_file($file, $destination, $single_file = false, $overwrite = f
 		{
 			$i = $iterator->getSubPathname();
 			// If this is a file, and it doesn't exist.... happy days!
-			if (substr($i, -1) != '/' && !file_exists($destination . '/' . $i))
+			if (substr($i, -1) != '/' && $destination !== null && !file_exists($destination . '/' . $i))
 				$write_this = true;
 			// If the file exists, we may not want to overwrite it.
 			elseif (substr($i, -1) != '/')
@@ -475,7 +476,7 @@ function read_zip_data($data, $destination, $single_file = false, $overwrite = f
  */
 function url_exists($url)
 {
-	$a_url = parse_url($url);
+	$a_url = parse_iri($url);
 
 	if (!isset($a_url['scheme']))
 		return false;
@@ -3007,6 +3008,26 @@ function package_crypt($pass)
 }
 
 /**
+ * @param string $dir
+ * @param string $filename The filename without an extension
+ * @param string $ext
+ * @return string The filename with a number appended but no extension
+ * @since 2.1
+ */
+function package_unique_filename($dir, $filename, $ext)
+{
+	if (file_exists($dir . '/' . $filename . '.' . $ext))
+	{
+		$i = 1;
+		while (file_exists($dir . '/' . $filename . '_' . $i . '.' . $ext))
+			$i++;
+		$filename .= '_' . $i;
+	}
+
+	return $filename;
+}
+
+/**
  * Creates a backup of forum files prior to modifying them
  *
  * @param string $id The name of the backup
@@ -3090,17 +3111,18 @@ function package_create_backup($id = 'backup')
 			@apache_reset_timeout();
 
 		// Phar doesn't handle open_basedir restrictions very well and throws a PHP Warning. Ignore that.
-		set_error_handler(function($errno, $errstr, $errfile, $errline)
-		{
-			// error was suppressed with the @-operator
-			if (0 === error_reporting())
+		set_error_handler(
+			function($errno, $errstr, $errfile, $errline)
 			{
-				return false;
+				// error was suppressed with the @-operator
+				if (0 === error_reporting())
+					return false;
+
+				if (strpos($errstr, 'PharData::__construct(): open_basedir') === false && strpos($errstr, 'PharData::compress(): open_basedir') === false)
+					log_error($errstr, 'general', $errfile, $errline);
+
+				return true;
 			}
-			if (strpos($errstr, 'PharData::__construct(): open_basedir') === false && strpos($errstr, 'PharData::compress(): open_basedir') === false)
-				log_error($errstr, 'general', $errfile, $errline);
-			return true;
-		}
 		);
 		$a = new PharData($output_file);
 		$a->buildFromIterator($iterator);
@@ -3158,7 +3180,9 @@ function package_validate_installtest($package)
 {
 	global $context;
 
-	$context['package_sha256_hash'] = hash_file('sha256', $package['file_name']);
+	// Don't validate directories.
+	$context['package_sha256_hash'] = is_dir($package['file_name']) ? null : hash_file('sha256', $package['file_name']);
+
 	$sendData = array(array(
 		'sha256_hash' => $context['package_sha256_hash'],
 		'file_name' => basename($package['file_name']),

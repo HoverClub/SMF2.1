@@ -10,7 +10,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -74,6 +74,9 @@ function smf_db_initiate($db_server, $db_name, $db_user, $db_passwd, $db_prefix,
 	// We are not going to make it very far without these.
 	if (!function_exists('mysqli_init') || !function_exists('mysqli_real_connect'))
 		display_db_error();
+
+	// This was the default prior to PHP 8.1, and all our code assumes it.
+	mysqli_report(MYSQLI_REPORT_OFF);
 
 	$connection = mysqli_init();
 
@@ -279,7 +282,7 @@ function smf_db_replacement__callback($matches)
 
 		case 'identifier':
 			// Backticks inside identifiers are supported as of MySQL 4.1. We don't need them for SMF.
-			return '`' . strtr($replacement, array('`' => '', '.' => '`.`')) . '`';
+			return '`' . implode('`.`', array_filter(explode('.', strtr($replacement, array('`' => ''))), 'strlen')) . '`';
 			break;
 
 		case 'raw':

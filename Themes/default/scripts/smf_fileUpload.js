@@ -171,7 +171,7 @@ function smf_fileUpload(oOptions) {
 					var e = $('#' + oEditorID).get(0);
 					var oEditor = sceditor.instance(e);
 
-					oEditor.insert(myDropzone.options.smf_insertBBC(response, w, h));
+					oEditor.insert(myDropzone.options.smf_insertBBC(response, w, h), ' ');
 				})
 				.appendTo(_innerElement.find('.attach-ui'));
 		};
@@ -196,6 +196,12 @@ function smf_fileUpload(oOptions) {
 					$.ajax({
 						url: smf_prepareScriptUrl(smf_scripturl) + 'action=uploadAttach;sa=delete;attach=' + attachmentId + ';' + smf_session_var + '=' + smf_session_id + (current_board ? ';board=' + current_board : ''),
 						type: 'GET',
+						headers: {
+							"X-SMF-AJAX": 1
+						},
+						xhrFields: {
+							withCredentials: typeof allow_xhjr_credentials !== "undefined" ? allow_xhjr_credentials : false
+						},
 						dataType: 'json',
 						beforeSend: function () {
 							ajax_indicator(true);
@@ -227,7 +233,7 @@ function smf_fileUpload(oOptions) {
 								file.accepted = false;
 
 								// Show the current amount of remaining files
-								$('.attach_remaining').html(myDropzone.options.maxFileAmount - myDropzone.getAcceptedFiles().length);
+								$('.attach_remaining').html(Math.max(myDropzone.options.maxFileAmount - myDropzone.getAcceptedFiles().length, 0));
 
 								myDropzone.options.hideFileProgressAndAllButtonsIfNeeded();
 							}
@@ -247,7 +253,7 @@ function smf_fileUpload(oOptions) {
 				.appendTo(_innerElement.find('.attach-ui'));
 
 				// Show the current amount of remaining files
-				$('.attach_remaining').html(myDropzone.options.maxFileAmount - myDropzone.getAcceptedFiles().length);
+				$('.attach_remaining').html(Math.max(myDropzone.options.maxFileAmount - myDropzone.getAcceptedFiles().length, 0));
 		};
 
 		// The editor needs this to know how to handle embedded attachements
@@ -524,6 +530,10 @@ function smf_fileUpload(oOptions) {
 			mock.accepted = true;
 
 			myDropzone.emit("addedfile", mock);
+
+			// Add to the files list
+			mock.status = Dropzone.SUCCESS;
+			myDropzone.files.push(mock);
 
 			// This file is "completed".
 			myDropzone.emit("complete", mock);

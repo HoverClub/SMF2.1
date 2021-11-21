@@ -1,5 +1,5 @@
 <?php
-// Version: 2.1 RC3; Install
+// Version: 2.1 RC4; Install
 
 // These should be the same as those in index.language.php.
 $txt['lang_character_set'] = 'UTF-8';
@@ -106,9 +106,6 @@ $txt['install_settings_dbsession'] = 'Database Sessions';
 $txt['install_settings_dbsession_title'] = 'Use the database for sessions instead of using files.';
 $txt['install_settings_dbsession_info1'] = 'This feature is almost always for the best, as it makes sessions more dependable.';
 $txt['install_settings_dbsession_info2'] = 'This feature is generally a good idea, but it may not work properly on this server.';
-$txt['install_settings_utf8'] = 'UTF-8 Character Set';
-$txt['install_settings_utf8_title'] = 'Use UTF-8 as default character set';
-$txt['install_settings_utf8_info'] = 'This feature lets both the database and the forum use an international character set, UTF-8. This can be useful when working with multiple languages that use different character sets.';
 $txt['install_settings_stats'] = 'Allow stat Collection';
 $txt['install_settings_stats_title'] = 'Allow Simple Machines to collect basic stats monthly';
 $txt['install_settings_stats_info'] = 'If enabled, this will allow Simple Machines to visit your site once a month to collect basic statistics. This will help us make decisions as to which configurations to optimize the software for. For more information please visit our <a href="https://www.simplemachines.org/about/stats.php" target="_blank" rel="noopener">info page</a>.';
@@ -200,7 +197,7 @@ $txt['error_invalid_characters_username'] = 'Invalid character used in Username.
 $txt['error_username_too_long'] = 'Username may only be up to 25 characters long.';
 $txt['error_username_left_empty'] = 'Username field was left empty.';
 $txt['error_db_prefix_reserved'] = 'The prefix that you entered is a reserved prefix. Please enter another prefix.';
-$txt['error_utf8_support'] = 'The database you are trying to use is not using UTF8 charset';
+$txt['error_utf8_support'] = 'The database you are trying to use is not using UTF-8 charset';
 
 $txt['ftp_login'] = 'Your FTP connection information';
 $txt['ftp_login_info'] = 'This web installer needs your FTP information in order to automate the installation for you. Please note that none of this information is saved in your installation, it is just used to setup SMF.';
@@ -321,8 +318,8 @@ $txt['upgrade_error_script_js'] = 'The upgrade script cannot find script.js or i
 $txt['upgrade_warning_lots_data'] = 'This upgrade script has detected that your forum contains a lot of data which needs upgrading. This process may take quite some time depending on your server and forum size, and for very large forums (~300,000 messages) may take several hours to complete.';
 $txt['upgrade_warning_out_of_date'] = 'This upgrade script is out of date! The current version of SMF is <em id="smfVersion" style="white-space: nowrap;">??</em> but this upgrade script is for <em id="yourVersion" style="white-space: nowrap;">%1$s</em>.<br><br>It is recommended that you visit the <a href="%2$s">Simple Machines Website</a> to ensure you are upgrading to the latest version.';
 
-$txt['upgrade_boarddir_settings'] = 'It looks as if your board directory settings <em>might</em> be incorrect. Your board directory is currently set to &quot;%1$s&quot;, but should probably be &quot;%2$s&quot;. Settings.php currently lists your paths as:';
-$txt['upgrade_boarddir'] = 'Board Directory:';
+$txt['upgrade_forumdir_settings'] = 'It looks as if your forum directory settings <em>might</em> be incorrect. Your forum directory is currently set to &quot;%1$s&quot;, but should probably be &quot;%2$s&quot;. Settings.php currently lists your paths as:';
+$txt['upgrade_forumdir'] = 'Forum Directory:';
 $txt['upgrade_sourcedir'] = 'Source Directory:';
 $txt['upgrade_cachedir'] = 'Cache Directory:';
 $txt['upgrade_incorrect_settings'] = 'If these seem incorrect please open Settings.php in a text editor before proceeding with this upgrade. If they are incorrect due to you moving your forum to a new location please download and execute the <a href="https://download.simplemachines.org/?tools">Repair Settings</a> tool from the Simple Machines website before continuing.';
@@ -379,7 +376,7 @@ $txt['upgrade_options'] = 'Upgrade Options';
 $txt['backup_database'] = 'Backup Database';
 $txt['database_changes'] = 'Database Changes';
 $txt['upgrade_complete'] = 'Upgrade Complete';
-$txt['converting_utf8'] = 'Converting to UTF8';
+$txt['converting_utf8'] = 'Converting to UTF-8';
 $txt['converting_json'] = 'Converting to JSON';
 
 ?>

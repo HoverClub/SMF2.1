@@ -10,7 +10,7 @@
  * @copyright 2021 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC3
+ * @version 2.1 RC4
  */
 
 if (!defined('SMF'))
@@ -179,7 +179,7 @@ function url_parts($local, $global)
 	global $boardurl, $modSettings;
 
 	// Parse the URL with PHP to make life easier.
-	$parsed_url = parse_url($boardurl);
+	$parsed_url = parse_iri($boardurl);
 
 	// Is local cookies off?
 	if (empty($parsed_url['path']) || !$local)
@@ -682,6 +682,9 @@ function validateUsername($memID, $username, $return_error = false, $check_reser
 			$errors[] = array('done', '(' . $smcFunc['htmlspecialchars']($username) . ') ' . $txt['name_in_use']);
 	}
 
+	// Maybe a mod wants to perform more checks?
+	call_integration_hook('integrate_validate_username', array($username, &$errors));
+
 	if ($return_error)
 		return $errors;
 	elseif (empty($errors))
@@ -713,6 +716,12 @@ function validatePassword($password, $username, $restrict_in = array())
 	// Perform basic requirements first.
 	if ($smcFunc['strlen']($password) < (empty($modSettings['password_strength']) ? 4 : 8))
 		return 'short';
+
+	// Maybe we need some more fancy password checks.
+	$pass_error = '';
+	call_integration_hook('integrate_validatePassword', array($password, $username, $restrict_in, &$pass_error));
+	if (!empty($pass_error))
+		return $pass_error;
 
 	// Is this enough?
 	if (empty($modSettings['password_strength']))
