@@ -757,6 +757,19 @@ function updateSettingsFile($config_vars, $keep_quotes = null, $rebuild = false)
 			'raw_default' => true,
 			'type' => 'string',
 		),
+		'cachedir_sqlite' => array(
+			'text' => implode("\n", array(
+				'/**',
+				' * This is only for SQLite3 cache system. It is the path to the directory where the SQLite3',
+				' * database file will be saved.',
+				' *',
+				' * @var string',
+				' */',
+			)),
+			'default' => '',
+			'auto_delete' => 2,
+			'type' => 'string',
+		),
 		'image_proxy_enabled' => array(
 			'text' => implode("\n", array(
 				'',
@@ -1168,6 +1181,7 @@ function updateSettingsFile($config_vars, $keep_quotes = null, $rebuild = false)
 				else
 				{
 					$replacement = '';
+					$substitutions[$var]['placeholder'] = '';
 
 					// This is just for cosmetic purposes. Removes the blank line.
 					$substitutions[$var]['search_pattern'] = str_replace('(?<=^|\s)', '\n?', $substitutions[$var]['search_pattern']);

@@ -2017,13 +2017,16 @@ function parse_sql($filename)
 
 	// Our custom error handler - does nothing but does stop public errors from XML!
 	// Note that php error suppression - @ - used heavily in the upgrader, calls the error handler
-	// but error_reporting() will return 0 as it does so.
+	// but error_reporting() will return 0 as it does so (pre php8).
+	// Note error handling in php8+ no longer fails silently on many errors, but error_reporting()
+	// will return 4437 (E_ERROR | E_CORE_ERROR | E_COMPILE_ERROR | E_USER_ERROR | E_RECOVERABLE_ERROR | E_PARSE)
+	// as it does so.
 	set_error_handler(
 		function($errno, $errstr, $errfile, $errline) use ($support_js)
 		{
 			if ($support_js)
 				return true;
-			elseif (error_reporting() != 0)
+			elseif ((error_reporting() != 0) && (error_reporting() != (E_ERROR | E_CORE_ERROR | E_COMPILE_ERROR | E_USER_ERROR | E_RECOVERABLE_ERROR | E_PARSE)))
 				echo 'Error: ' . $errstr . ' File: ' . $errfile . ' Line: ' . $errline;
 		}
 	);
@@ -2554,79 +2557,6 @@ function textfield_alter($change, $substep)
 		);
 	}
 	nextSubstep($substep);
-}
-
-// Check if we need to alter this query.
-function checkChange(&$change)
-{
-	global $smcFunc, $db_type, $databases;
-	static $database_version, $where_field_support;
-
-	// Attempt to find a database_version.
-	if (empty($database_version))
-	{
-		$database_version = $databases[$db_type]['version_check']();
-		$where_field_support = $db_type == 'mysql' && version_compare('5.0', $database_version, '<=');
-	}
-
-	// Not a column we need to check on?
-	if (!in_array($change['name'], array('memberGroups', 'passwordSalt')))
-		return;
-
-	// Break it up you (six|seven).
-	$temp = explode(' ', str_replace('NOT NULL', 'NOT_NULL', $change['text']));
-
-	// Can we support a shortcut method?
-	if ($where_field_support)
-	{
-		// Get the details about this change.
-		$request = $smcFunc['db_query']('', '
-			SHOW FIELDS
-			FROM {db_prefix}{raw:table}
-			WHERE Field = {string:old_name} OR Field = {string:new_name}',
-			array(
-				'table' => $change['table'],
-				'old_name' => $temp[1],
-				'new_name' => $temp[2],
-			)
-		);
-		// !!! This doesn't technically work because we don't pass request into it, but it hasn't broke anything yet.
-		if ($smcFunc['db_num_rows'] != 1)
-			return;
-
-		list (, $current_type) = $smcFunc['db_fetch_assoc']($request);
-		$smcFunc['db_free_result']($request);
-	}
-	else
-	{
-		// Do this the old fashion, sure method way.
-		$request = $smcFunc['db_query']('', '
-			SHOW FIELDS
-			FROM {db_prefix}{raw:table}',
-			array(
-				'table' => $change['table'],
-			)
-		);
-		// Mayday!
-		// !!! This doesn't technically work because we don't pass request into it, but it hasn't broke anything yet.
-		if ($smcFunc['db_num_rows'] == 0)
-			return;
-
-		// Oh where, oh where has my little field gone. Oh where can it be...
-		while ($row = $smcFunc['db_query']($request))
-			if ($row['Field'] == $temp[1] || $row['Field'] == $temp[2])
-			{
-				$current_type = $row['Type'];
-				break;
-			}
-	}
-
-	// If this doesn't match, the column may of been altered for a reason.
-	if (trim($current_type) != trim($temp[3]))
-		$temp[3] = $current_type;
-
-	// Piece this back together.
-	$change['text'] = str_replace('NOT_NULL', 'NOT NULL', implode(' ', $temp));
 }
 
 // The next substep.

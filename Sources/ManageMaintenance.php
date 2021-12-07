@@ -52,6 +52,7 @@ function ManageMaintenance()
 				'version' => 'VersionDetail',
 				'repair' => 'MaintainFindFixErrors',
 				'recount' => 'AdminBoardRecount',
+				'rebuild_settings' => 'RebuildSettingsFile',
 				'logs' => 'MaintainEmptyUnimportantLogs',
 				'cleancache' => 'MaintainCleanCache',
 			),
@@ -154,8 +155,8 @@ function MaintainRoutine()
 {
 	global $context, $txt;
 
-	if (isset($_GET['done']) && $_GET['done'] == 'recount')
-		$context['maintenance_finished'] = $txt['maintain_recount'];
+	if (isset($_GET['done']) && in_array($_GET['done'], array('recount', 'rebuild_settings')))
+		$context['maintenance_finished'] = $txt['maintain_' . $_GET['done']];
 }
 
 /**
@@ -815,11 +816,10 @@ function AdminBoardRecount()
 	checkSession('request');
 
 	// validate the request or the loop
-	if (!isset($_REQUEST['step']))
-		validateToken('admin-maint');
-	else
-		validateToken('admin-boardrecount');
-
+	validateToken(!isset($_REQUEST['step']) ? 'admin-maint' : 'admin-boardrecount');
+	$context['not_done_token'] = 'admin-boardrecount';
+	createToken($context['not_done_token']);
+	
 	$context['page_title'] = $txt['not_done_title'];
 	$context['continue_post_data'] = '';
 	$context['continue_countdown'] = 3;
@@ -911,9 +911,6 @@ function AdminBoardRecount()
 
 			if (microtime(true) - TIME_START > 3)
 			{
-				createToken('admin-boardrecount');
-				$context['continue_post_data'] = '<input type="hidden" name="' . $context['admin-boardrecount_token_var'] . '" value="' . $context['admin-boardrecount_token'] . '">';
-
 				$context['continue_get_data'] = '?action=admin;area=maintain;sa=routine;activity=recount;step=0;start=' . $_REQUEST['start'] . ';' . $context['session_var'] . '=' . $context['session_id'];
 				$context['continue_percent'] = round((100 * $_REQUEST['start'] / $max_topics) / $total_steps);
 
@@ -969,9 +966,6 @@ function AdminBoardRecount()
 
 			if (microtime(true) - TIME_START > 3)
 			{
-				createToken('admin-boardrecount');
-				$context['continue_post_data'] = '<input type="hidden" name="' . $context['admin-boardrecount_token_var'] . '" value="' . $context['admin-boardrecount_token'] . '">';
-
 				$context['continue_get_data'] = '?action=admin;area=maintain;sa=routine;activity=recount;step=1;start=' . $_REQUEST['start'] . ';' . $context['session_var'] . '=' . $context['session_id'];
 				$context['continue_percent'] = round((200 + 100 * $_REQUEST['start'] / $max_topics) / $total_steps);
 
@@ -1025,9 +1019,6 @@ function AdminBoardRecount()
 
 			if (microtime(true) - TIME_START > 3)
 			{
-				createToken('admin-boardrecount');
-				$context['continue_post_data'] = '<input type="hidden" name="' . $context['admin-boardrecount_token_var'] . '" value="' . $context['admin-boardrecount_token'] . '">';
-
 				$context['continue_get_data'] = '?action=admin;area=maintain;sa=routine;activity=recount;step=2;start=' . $_REQUEST['start'] . ';' . $context['session_var'] . '=' . $context['session_id'];
 				$context['continue_percent'] = round((300 + 100 * $_REQUEST['start'] / $max_topics) / $total_steps);
 
@@ -1081,9 +1072,6 @@ function AdminBoardRecount()
 
 			if (microtime(true) - TIME_START > 3)
 			{
-				createToken('admin-boardrecount');
-				$context['continue_post_data'] = '<input type="hidden" name="' . $context['admin-boardrecount_token_var'] . '" value="' . $context['admin-boardrecount_token'] . '">';
-
 				$context['continue_get_data'] = '?action=admin;area=maintain;sa=routine;activity=recount;step=3;start=' . $_REQUEST['start'] . ';' . $context['session_var'] . '=' . $context['session_id'];
 				$context['continue_percent'] = round((400 + 100 * $_REQUEST['start'] / $max_topics) / $total_steps);
 
@@ -1137,9 +1125,6 @@ function AdminBoardRecount()
 
 			if (microtime(true) - TIME_START > 3)
 			{
-				createToken('admin-boardrecount');
-				$context['continue_post_data'] = '<input type="hidden" name="' . $context['admin-boardrecount_token_var'] . '" value="' . $context['admin-boardrecount_token'] . '">';
-
 				$context['continue_get_data'] = '?action=admin;area=maintain;sa=routine;activity=recount;step=4;start=' . $_REQUEST['start'] . ';' . $context['session_var'] . '=' . $context['session_id'];
 				$context['continue_percent'] = round((500 + 100 * $_REQUEST['start'] / $max_topics) / $total_steps);
 
@@ -1186,9 +1171,6 @@ function AdminBoardRecount()
 
 		if (microtime(true) - TIME_START > 3)
 		{
-			createToken('admin-boardrecount');
-			$context['continue_post_data'] = '<input type="hidden" name="' . $context['admin-boardrecount_token_var'] . '" value="' . $context['admin-boardrecount_token'] . '">';
-
 			$context['continue_get_data'] = '?action=admin;area=maintain;sa=routine;activity=recount;step=6;start=0;' . $context['session_var'] . '=' . $context['session_id'];
 			$context['continue_percent'] = round(700 / $total_steps);
 
@@ -1233,9 +1215,6 @@ function AdminBoardRecount()
 
 			if (microtime(true) - TIME_START > 3)
 			{
-				createToken('admin-boardrecount');
-				$context['continue_post_data'] = '<input type="hidden" name="' . $context['admin-boardrecount_token_var'] . '" value="' . $context['admin-boardrecount_token'] . '">';
-
 				$context['continue_get_data'] = '?action=admin;area=maintain;sa=routine;activity=recount;step=6;start=' . $_REQUEST['start'] . ';' . $context['session_var'] . '=' . $context['session_id'];
 				$context['continue_percent'] = round((700 + 100 * $_REQUEST['start'] / $modSettings['maxMsgID']) / $total_steps);
 
@@ -1845,6 +1824,18 @@ function MaintainRecountPosts()
 	redirectexit('action=admin;area=maintain;sa=members;done=recountposts');
 }
 
+function RebuildSettingsFile()
+{
+	global $sourcedir;
+
+	isAllowedTo('admin_forum');
+
+	require_once($sourcedir . '/Subs-Admin.php');
+	updateSettingsFile(array(), false, true);
+
+	redirectexit('action=admin;area=maintain;sa=routine;done=rebuild_settings');
+}
+
 /**
  * Generates a list of integration hooks for display
  * Accessed through ?action=admin;area=maintain;sa=hooks;
@@ -2104,7 +2095,12 @@ function get_integration_hooks_data($start, $per_page, $sort, $filtered_hooks, $
 	foreach ($filtered_hooks as $hook => $functions)
 		foreach ($functions as $rawFunc)
 		{
-			$hookParsedData = parse_integration_hook($hook, $rawFunc, $files);
+			$hookParsedData = parse_integration_hook($hook, $rawFunc);
+
+			// Handle hooks pointing outside the sources directory.
+			if ($hookParsedData['absPath'] != '' && !isset($files[$hookParsedData['absPath']]) && file_exists($hookParsedData['absPath']))
+				$function_list += get_defined_functions_in_file($hookParsedData['absPath']);
+
 			$hook_exists = isset($function_list[$hookParsedData['call']]) || (substr($hook, -8) === '_include' && isset($files[$hookParsedData['absPath']]));
 			$temp = array(
 				'hook_name' => $hook,
@@ -2158,7 +2154,7 @@ function get_integration_hooks()
  * @param string $rawData A string as it was saved to the DB.
  * @return array everything found in the string itself
  */
-function parse_integration_hook(string $hook, string $rawData, array $files)
+function parse_integration_hook(string $hook, string $rawData)
 {
 	global $boarddir, $settings, $sourcedir;
 
@@ -2166,7 +2162,6 @@ function parse_integration_hook(string $hook, string $rawData, array $files)
 	$hookData = array(
 		'object' => false,
 		'enabled' => true,
-		'fileExists' => false,
 		'absPath' => '',
 		'hookFile' => '',
 		'pureFunc' => '',
@@ -2180,7 +2175,6 @@ function parse_integration_hook(string $hook, string $rawData, array $files)
 	if (empty($rawData))
 		return $hookData;
 
-	// For convenience purposes only!
 	$modFunc = $rawData;
 
 	// Any files?
@@ -2190,7 +2184,6 @@ function parse_integration_hook(string $hook, string $rawData, array $files)
 	{
 		list ($hookData['hookFile'], $modFunc) = explode('|', $modFunc);
 		$hookData['absPath'] = strtr(strtr(trim($hookData['hookFile']), array('$boarddir' => $boarddir, '$sourcedir' => $sourcedir, '$themedir' => $settings['theme_dir'] ?? '')), '\\', '/');
-		$hookData['fileExists'] = isset($files[$hookData['absPath']]) || file_exists($hookData['absPath']);
 	}
 
 	// Hook is an instance.
