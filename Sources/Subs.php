@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -314,6 +314,7 @@ function updateMemberData($members, $data)
 			'website_url',
 			'location',
 			'time_format',
+			'timezone',
 			'time_offset',
 			'avatar',
 			'lngfile',
@@ -564,22 +565,15 @@ function constructPageIndex($base_url, &$start, $max_value, $num_per_page, $flex
 	$start = (int) $start;
 	$start_invalid = $start < 0;
 
-	// Make sure $start is a proper variable - not less than 0.
-	if ($start_invalid)
-		$start = 0;
-	// Not greater than the upper bound.
-	elseif ($start >= $max_value)
-		$start = max(0, (int) $max_value - (((int) $max_value % (int) $num_per_page) == 0 ? $num_per_page : ((int) $max_value % (int) $num_per_page)));
-	// And it has to be a multiple of $num_per_page!
-	else
-		$start = max(0, (int) $start - ((int) $start % (int) $num_per_page));
+	// $start must be within bounds and be a multiple of $num_per_page.
+	$start = max(0, $start);
+	$start = min($start - ($start % $num_per_page), $max_value);
 
 	$context['current_page'] = $start / $num_per_page;
 
-	// Define some default page index settings if we don't already have it...
+	// Define some default page index settings for compatibility with old themes.
+	// !!! Should this be moved to loadTheme()?
 	if (!isset($settings['page_index']))
-	{
-		// This defines the formatting for the page indexes used throughout the forum.
 		$settings['page_index'] = array(
 			'extra_before' => '<span class="pages">' . $txt['pages'] . '</span>',
 			'previous_page' => '<span class="main_icons previous_page"></span>',
@@ -589,91 +583,77 @@ function constructPageIndex($base_url, &$start, $max_value, $num_per_page, $flex
 			'next_page' => '<span class="main_icons next_page"></span>',
 			'extra_after' => '',
 		);
-	}
 
+	$last_page_value = (int) (($max_value - 1) / $num_per_page) * $num_per_page;
 	$base_link = strtr($settings['page_index']['page'], array('{URL}' => $flexible_start ? $base_url : strtr($base_url, array('%' => '%%')) . ';start=%1$d'));
 	$pageindex = $settings['page_index']['extra_before'];
+
+	// Show the "prev page" link. (>prev page< 1 ... 6 7 [8] 9 10 ... 15 next page)
+	if ($start != 0 && !$start_invalid && $show_prevnext)
+		$pageindex .= sprintf($base_link, $start - $num_per_page, $settings['page_index']['previous_page']);
 
 	// Compact pages is off or on?
 	if (empty($modSettings['compactTopicPagesEnable']))
 	{
-		// Show the left arrow.
-		$pageindex .= $start == 0 ? ' ' : sprintf($base_link, $start - $num_per_page, $settings['page_index']['previous_page']);
-
 		// Show all the pages.
 		$display_page = 1;
 		for ($counter = 0; $counter < $max_value; $counter += $num_per_page)
 			$pageindex .= $start == $counter && !$start_invalid ? sprintf($settings['page_index']['current_page'], $display_page++) : sprintf($base_link, $counter, $display_page++);
-
-		// Show the right arrow.
-		$display_page = ($start + $num_per_page) > $max_value ? $max_value : ($start + $num_per_page);
-		if ($start != $counter - $max_value && !$start_invalid)
-			$pageindex .= $display_page > $counter - $num_per_page ? ' ' : sprintf($base_link, $display_page, $settings['page_index']['next_page']);
 	}
 	else
 	{
 		// If they didn't enter an odd value, pretend they did.
-		$PageContiguous = (int) ($modSettings['compactTopicPagesContiguous'] - ($modSettings['compactTopicPagesContiguous'] % 2)) / 2;
-
-		// Show the "prev page" link. (>prev page< 1 ... 6 7 [8] 9 10 ... 15 next page)
-		if (!empty($start) && $show_prevnext)
-			$pageindex .= sprintf($base_link, $start - $num_per_page, $settings['page_index']['previous_page']);
-		else
-			$pageindex .= '';
+		$page_contiguous = (int) ($modSettings['compactTopicPagesContiguous'] - ($modSettings['compactTopicPagesContiguous'] % 2)) / 2;
 
 		// Show the first page. (prev page >1< ... 6 7 [8] 9 10 ... 15)
-		if ($start > $num_per_page * $PageContiguous)
+		if ($start > $num_per_page * $page_contiguous)
 			$pageindex .= sprintf($base_link, 0, '1');
 
 		// Show the ... after the first page.  (prev page 1 >...< 6 7 [8] 9 10 ... 15 next page)
-		if ($start > $num_per_page * ($PageContiguous + 1))
+		if ($start > $num_per_page * ($page_contiguous + 1))
 			$pageindex .= strtr($settings['page_index']['expand_pages'], array(
 				'{LINK}' => JavaScriptEscape($smcFunc['htmlspecialchars']($base_link)),
 				'{FIRST_PAGE}' => $num_per_page,
-				'{LAST_PAGE}' => $start - $num_per_page * $PageContiguous,
+				'{LAST_PAGE}' => $start - $num_per_page * $page_contiguous,
 				'{PER_PAGE}' => $num_per_page,
 			));
 
-		// Show the pages before the current one. (prev page 1 ... >6 7< [8] 9 10 ... 15 next page)
-		for ($nCont = $PageContiguous; $nCont >= 1; $nCont--)
-			if ($start >= $num_per_page * $nCont)
+		for ($nCont = -$page_contiguous; $nCont <= $page_contiguous; $nCont++)
+		{
+			$tmpStart = $start + $num_per_page * $nCont;
+			if ($nCont == 0)
 			{
-				$tmpStart = $start - $num_per_page * $nCont;
-				$pageindex .= sprintf($base_link, $tmpStart, $tmpStart / $num_per_page + 1);
+				// Show the current page. (prev page 1 ... 6 7 >[8]< 9 10 ... 15 next page)
+				if (!$start_invalid)
+					$pageindex .= sprintf($settings['page_index']['current_page'], $start / $num_per_page + 1);
+				else
+					$pageindex .= sprintf($base_link, $start, $start / $num_per_page + 1);
 			}
-
-		// Show the current page. (prev page 1 ... 6 7 >[8]< 9 10 ... 15 next page)
-		if (!$start_invalid)
-			$pageindex .= sprintf($settings['page_index']['current_page'], $start / $num_per_page + 1);
-		else
-			$pageindex .= sprintf($base_link, $start, $start / $num_per_page + 1);
-
-		// Show the pages after the current one... (prev page 1 ... 6 7 [8] >9 10< ... 15 next page)
-		$tmpMaxPages = (int) (($max_value - 1) / $num_per_page) * $num_per_page;
-		for ($nCont = 1; $nCont <= $PageContiguous; $nCont++)
-			if ($start + $num_per_page * $nCont <= $tmpMaxPages)
-			{
-				$tmpStart = $start + $num_per_page * $nCont;
+			// Show the pages before the current one. (prev page 1 ... >6 7< [8] 9 10 ... 15 next page)
+			// ... or ...
+			// Show the pages after the current one... (prev page 1 ... 6 7 [8] >9 10< ... 15 next page)
+			elseif (($nCont < 0 && $start >= $num_per_page * -$nCont) || ($nCont > 0 && $tmpStart <= $last_page_value))
 				$pageindex .= sprintf($base_link, $tmpStart, $tmpStart / $num_per_page + 1);
-			}
+		}
 
 		// Show the '...' part near the end. (prev page 1 ... 6 7 [8] 9 10 >...< 15 next page)
-		if ($start + $num_per_page * ($PageContiguous + 1) < $tmpMaxPages)
+		if ($start + $num_per_page * ($page_contiguous + 1) < $last_page_value)
 			$pageindex .= strtr($settings['page_index']['expand_pages'], array(
 				'{LINK}' => JavaScriptEscape($smcFunc['htmlspecialchars']($base_link)),
-				'{FIRST_PAGE}' => $start + $num_per_page * ($PageContiguous + 1),
-				'{LAST_PAGE}' => $tmpMaxPages,
+				'{FIRST_PAGE}' => $start + $num_per_page * ($page_contiguous + 1),
+				'{LAST_PAGE}' => $last_page_value,
 				'{PER_PAGE}' => $num_per_page,
 			));
 
 		// Show the last number in the list. (prev page 1 ... 6 7 [8] 9 10 ... >15<  next page)
-		if ($start + $num_per_page * $PageContiguous < $tmpMaxPages)
-			$pageindex .= sprintf($base_link, $tmpMaxPages, $tmpMaxPages / $num_per_page + 1);
-
-		// Show the "next page" link. (prev page 1 ... 6 7 [8] 9 10 ... 15 >next page<)
-		if ($start != $tmpMaxPages && $show_prevnext)
-			$pageindex .= sprintf($base_link, $start + $num_per_page, $settings['page_index']['next_page']);
+		if ($start + $num_per_page * $page_contiguous < $last_page_value)
+			$pageindex .= sprintf($base_link, $last_page_value, $last_page_value / $num_per_page + 1);
 	}
+
+	// Show the "next page" link. (prev page 1 ... 6 7 [8] 9 10 ... 15 >next page<)
+	if ($start != $last_page_value && !$start_invalid && $show_prevnext)
+		$pageindex .= sprintf($base_link, $start + $num_per_page, $settings['page_index']['next_page']);
+
 	$pageindex .= $settings['page_index']['extra_after'];
 
 	return $pageindex;
@@ -721,233 +701,58 @@ function comma_format($number, $override_decimal_count = false)
  * - performs localization (more than just strftime would do alone.)
  *
  * @param int $log_time A timestamp
- * @param bool|string $show_today Whether to show "Today"/"Yesterday" or just a date. If a string is specified, that is used to temporarily override the date format.
- * @param bool|string $offset_type If false, uses both user time offset and forum offset. If 'forum', uses only the forum offset. Otherwise no offset is applied.
- * @param bool $process_safe Activate setlocale check for changes at runtime. Slower, but safer.
- * @return string A formatted timestamp
+ * @param bool|string $show_today Whether to show "Today"/"Yesterday" or just a date.
+ *     If a string is specified, that is used to temporarily override the date format.
+ * @param null|string $tzid Time zone to use when generating the formatted string.
+ *     If empty, the user's time zone will be used.
+ *     If set to 'forum', the value of $modSettings['default_timezone'] will be used.
+ *     If set to a valid time zone identifier, that will be used.
+ *     Otherwise, the value of date_default_timezone_get() will be used.
+ * @return string A formatted time string
  */
-function timeformat($log_time, $show_today = true, $offset_type = false, $process_safe = false)
+function timeformat($log_time, $show_today = true, $tzid = null)
 {
 	global $context, $user_info, $txt, $modSettings;
-	static $non_twelve_hour, $locale, $now;
-	static $unsupportedFormats, $finalizedFormats;
-
-	$unsupportedFormatsWindows = array('z', 'Z');
+	static $today;
 
 	// Ensure required values are set
 	$user_info['time_format'] = !empty($user_info['time_format']) ? $user_info['time_format'] : (!empty($modSettings['time_format']) ? $modSettings['time_format'] : '%F %H:%M');
 
-	// Offset the time.
-	if (!$offset_type)
-		$log_time = forum_time(true, $log_time);
-	// Just the forum offset?
-	elseif ($offset_type == 'forum')
-		$log_time = forum_time(false, $log_time);
-
-	// We can't have a negative date (on Windows, at least.)
-	if ($log_time < 0)
-		$log_time = 0;
+	// For backward compatibility, replace empty values with user's time zone
+	// and replace 'forum' with forum's default time zone.
+	$tzid = empty($tzid) ? getUserTimezone() : (($tzid === 'forum' || @timezone_open((string) $tzid) === false) ? $modSettings['default_timezone'] : (string) $tzid);
 
 	// Today and Yesterday?
 	$prefix = '';
 	if ($modSettings['todayMod'] >= 1 && $show_today === true)
 	{
-		$now_time = forum_time();
+		if (!isset($today[$tzid]))
+			$today[$tzid] = date_format(date_create('today ' . $tzid), 'U');
 
-		if ($now_time - $log_time < (86400 * $modSettings['todayMod']))
+		// Tomorrow? We don't support the future. ;)
+		if ($log_time >= $today[$tzid] + 86400)
 		{
-			$then = @getdate($log_time);
-			$now = (!empty($now) ? $now : @getdate($now_time));
-
-			// Same day of the year, same year.... Today!
-			if ($then['yday'] == $now['yday'] && $then['year'] == $now['year'])
-			{
-				$prefix = $txt['today'];
-			}
-			// Day-of-year is one less and same year, or it's the first of the year and that's the last of the year...
-			elseif ($modSettings['todayMod'] == '2' && (($then['yday'] == $now['yday'] - 1 && $then['year'] == $now['year']) || ($now['yday'] == 0 && $then['year'] == $now['year'] - 1) && $then['mon'] == 12 && $then['mday'] == 31))
-			{
-				$prefix = $txt['yesterday'];
-			}
+			$prefix = '';
+		}
+		// Today.
+		elseif ($log_time >= $today[$tzid])
+		{
+			$prefix = $txt['today'];
+		}
+		// Yesterday.
+		elseif ($modSettings['todayMod'] > 1 && $log_time >= $today[$tzid] - 86400)
+		{
+			$prefix = $txt['yesterday'];
 		}
 	}
 
 	// If $show_today is not a bool, use it as the date format & don't use $user_info. Allows for temp override of the format.
-	$str = !is_bool($show_today) ? $show_today : $user_info['time_format'];
+	$format = !is_bool($show_today) ? $show_today : $user_info['time_format'];
 
-	// Use the cached formats if available
-	if (is_null($finalizedFormats))
-		$finalizedFormats = (array) cache_get_data('timeformatstrings', 86400);
-
-	if (!isset($finalizedFormats[$str]) || !is_array($finalizedFormats[$str]))
-		$finalizedFormats[$str] = array();
-
-	// Make a supported version for this format if we don't already have one
-	$format_type = !empty($prefix) ? 'time_only' : 'normal';
-	if (empty($finalizedFormats[$str][$format_type]))
-	{
-		$timeformat = $format_type == 'time_only' ? get_date_or_time_format('time', $str) : $str;
-
-		// Not all systems support all formats, and Windows fails altogether if unsupported ones are
-		// used, so let's prevent that. Some substitutions go to the nearest reasonable fallback, some
-		// turn into static strings, some (i.e. %a, %A, %b, %B, %p) have special handling below.
-		$strftimeFormatSubstitutions = array(
-			// Day
-			'a' => '#txt_days_short_%w#', 'A' => '#txt_days_%w#', 'e' => '%d', 'd' => '&#37;d', 'j' => '&#37;j', 'u' => '%w', 'w' => '&#37;w',
-			// Week
-			'U' => '&#37;U', 'V' => '%U', 'W' => '%U',
-			// Month
-			'b' => '#txt_months_short_%m#', 'B' => '#txt_months_%m#', 'h' => '%b', 'm' => '&#37;m',
-			// Year
-			'C' => '&#37;C', 'g' => '%y', 'G' => '%Y', 'y' => '&#37;y', 'Y' => '&#37;Y',
-			// Time
-			'H' => '&#37;H', 'k' => '%H', 'I' => '%H', 'l' => '%I', 'M' => '&#37;M', 'p' => '&#37;p', 'P' => '%p',
-			'r' => '%I:%M:%S %p', 'R' => '%H:%M', 'S' => '&#37;S', 'T' => '%H:%M:%S', 'X' => '%T', 'z' => '&#37;z', 'Z' => '&#37;Z',
-			// Time and Date Stamps
-			'c' => '%F %T', 'D' => '%m/%d/%y', 'F' => '%Y-%m-%d', 's' => '&#37;s', 'x' => '%F',
-			// Miscellaneous
-			'n' => "\n", 't' => "\t", '%' => '&#37;',
-		);
-
-		// No need to do this part again if we already did it once
-		if (is_null($unsupportedFormats))
-			$unsupportedFormats = (array) cache_get_data('unsupportedtimeformats', 86400);
-		if (empty($unsupportedFormats))
-		{
-			foreach ($strftimeFormatSubstitutions as $format => $substitution)
-			{
-				// Avoid a crashing bug with PHP 7 on certain versions of Windows
-				if ($context['server']['is_windows'] && in_array($format, $unsupportedFormatsWindows))
-				{
-					$unsupportedFormats[] = $format;
-					continue;
-				}
-
-				$value = @strftime('%' . $format);
-
-				// Windows will return false for unsupported formats
-				// Other operating systems return the format string as a literal
-				if ($value === false || $value === $format)
-					$unsupportedFormats[] = $format;
-			}
-			cache_put_data('unsupportedtimeformats', $unsupportedFormats, 86400);
-		}
-
-		// Windows needs extra help if $timeformat contains something completely invalid, e.g. '%Q'
-		if (DIRECTORY_SEPARATOR === '\\')
-			$timeformat = preg_replace('~%(?!' . implode('|', array_keys($strftimeFormatSubstitutions)) . ')~', '&#37;', $timeformat);
-
-		// Substitute unsupported formats with supported ones
-		if (!empty($unsupportedFormats))
-			while (preg_match('~%(' . implode('|', $unsupportedFormats) . ')~', $timeformat, $matches))
-				$timeformat = str_replace($matches[0], $strftimeFormatSubstitutions[$matches[1]], $timeformat);
-
-		// Remember this so we don't need to do it again
-		$finalizedFormats[$str][$format_type] = $timeformat;
-		cache_put_data('timeformatstrings', $finalizedFormats, 86400);
-	}
-
-	$timeformat = $finalizedFormats[$str][$format_type];
-
-	// Windows requires a slightly different language code identifier (LCID).
-	// https://msdn.microsoft.com/en-us/library/cc233982.aspx
-	$lang_locale = $context['server']['is_windows'] ? strtr($txt['lang_locale'], '_', '-') : $txt['lang_locale'];
-
-	// Make sure we are using the correct locale.
-	if (!isset($locale) || ($process_safe === true && setlocale(LC_TIME, '0') != $locale))
-		$locale = setlocale(LC_TIME, array($lang_locale . '.' . $modSettings['global_character_set'], $lang_locale . '.' . $txt['lang_character_set'], $lang_locale));
-
-	// If the current locale is unsupported, we'll have to localize the hard way.
-	if ($locale === false)
-	{
-		$timeformat = strtr($timeformat, array(
-			'%a' => '#txt_days_short_%w#',
-			'%A' => '#txt_days_%w#',
-			'%b' => '#txt_months_short_%m#',
-			'%B' => '#txt_months_%m#',
-			'%p' => '&#37;p',
-			'%P' => '&#37;p'
-		));
-	}
-	// Just in case the locale doesn't support '%p' properly.
-	// @todo Is this even necessary?
-	else
-	{
-		if (!isset($non_twelve_hour) && strpos($timeformat, '%p') !== false)
-			$non_twelve_hour = trim(strftime('%p')) === '';
-
-		if (!empty($non_twelve_hour))
-			$timeformat = strtr($timeformat, array(
-				'%p' => '&#37;p',
-				'%P' => '&#37;p'
-			));
-	}
+	$format = !empty($prefix) ? get_date_or_time_format('time', $format) : $format;
 
 	// And now, the moment we've all be waiting for...
-	$timestring = strftime($timeformat, $log_time);
-
-	// Do-it-yourself time localization.  Fun.
-	if (strpos($timestring, '&#37;p') !== false)
-		$timestring = str_replace('&#37;p', (strftime('%H', $log_time) < 12 ? $txt['time_am'] : $txt['time_pm']), $timestring);
-	if (strpos($timestring, '#txt_') !== false)
-	{
-		if (strpos($timestring, '#txt_days_short_') !== false)
-			$timestring = strtr($timestring, array(
-				'#txt_days_short_0#' => $txt['days_short'][0],
-				'#txt_days_short_1#' => $txt['days_short'][1],
-				'#txt_days_short_2#' => $txt['days_short'][2],
-				'#txt_days_short_3#' => $txt['days_short'][3],
-				'#txt_days_short_4#' => $txt['days_short'][4],
-				'#txt_days_short_5#' => $txt['days_short'][5],
-				'#txt_days_short_6#' => $txt['days_short'][6],
-			));
-
-		if (strpos($timestring, '#txt_days_') !== false)
-			$timestring = strtr($timestring, array(
-				'#txt_days_0#' => $txt['days'][0],
-				'#txt_days_1#' => $txt['days'][1],
-				'#txt_days_2#' => $txt['days'][2],
-				'#txt_days_3#' => $txt['days'][3],
-				'#txt_days_4#' => $txt['days'][4],
-				'#txt_days_5#' => $txt['days'][5],
-				'#txt_days_6#' => $txt['days'][6],
-			));
-
-		if (strpos($timestring, '#txt_months_short_') !== false)
-			$timestring = strtr($timestring, array(
-				'#txt_months_short_01#' => $txt['months_short'][1],
-				'#txt_months_short_02#' => $txt['months_short'][2],
-				'#txt_months_short_03#' => $txt['months_short'][3],
-				'#txt_months_short_04#' => $txt['months_short'][4],
-				'#txt_months_short_05#' => $txt['months_short'][5],
-				'#txt_months_short_06#' => $txt['months_short'][6],
-				'#txt_months_short_07#' => $txt['months_short'][7],
-				'#txt_months_short_08#' => $txt['months_short'][8],
-				'#txt_months_short_09#' => $txt['months_short'][9],
-				'#txt_months_short_10#' => $txt['months_short'][10],
-				'#txt_months_short_11#' => $txt['months_short'][11],
-				'#txt_months_short_12#' => $txt['months_short'][12],
-			));
-
-		if (strpos($timestring, '#txt_months_') !== false)
-			$timestring = strtr($timestring, array(
-				'#txt_months_01#' => $txt['months'][1],
-				'#txt_months_02#' => $txt['months'][2],
-				'#txt_months_03#' => $txt['months'][3],
-				'#txt_months_04#' => $txt['months'][4],
-				'#txt_months_05#' => $txt['months'][5],
-				'#txt_months_06#' => $txt['months'][6],
-				'#txt_months_07#' => $txt['months'][7],
-				'#txt_months_08#' => $txt['months'][8],
-				'#txt_months_09#' => $txt['months'][9],
-				'#txt_months_10#' => $txt['months'][10],
-				'#txt_months_11#' => $txt['months'][11],
-				'#txt_months_12#' => $txt['months'][12],
-			));
-	}
-
-	// Restore any literal percent characters, add the prefix, and we're done.
-	return $prefix . str_replace('&#37;', '%', $timestring);
+	return $prefix . smf_strftime($format, $log_time, $tzid);
 }
 
 /**
@@ -1044,18 +849,23 @@ function get_date_or_time_format($type = '', $format = '')
 		array(
 			// Anything that isn't a specification, punctuation mark, or whitespace.
 			'~(?<!%)\p{L}|[^\p{L}\p{P}\s]~u',
-			// A series of punctuation marks (except %), possibly separated by whitespace.
-			'~([^%\P{P}])(\s*)(?'.'>(\1|[^%\P{Po}])\s*(?!$))*~u',
+			// Repeated punctuation marks (except %), possibly separated by whitespace.
+			'~(?'.'>([^%\P{P}])\s*(?=\1))*~u',
+			'~([^%\P{P}])(?'.'>\1(?!$))*~u',
 			// Unwanted trailing punctuation and whitespace.
 			'~(?'.'>([\p{Pd}\p{Ps}\p{Pi}\p{Pc}]|[^%\P{Po}])\s*)*$~u',
 			// Unwanted opening punctuation and whitespace.
 			'~^\s*(?'.'>([\p{Pd}\p{Pe}\p{Pf}\p{Pc}]|[^%\P{Po}])\s*)*~u',
+			// Runs of horizontal whitespace.
+			'~\s+~',
 		),
 		array(
 			'',
+			'$1',
 			'$1$2',
 			'',
 			'',
+			' ',
 		),
 		$format
 	);
@@ -1068,6 +878,353 @@ function get_date_or_time_format($type = '', $format = '')
 	$formats[$orig_format][$type] = trim($format);
 
 	return $formats[$orig_format][$type];
+}
+
+/**
+ * Replacement for strftime() that is compatible with PHP 8.1+.
+ *
+ * This does not use the system's strftime library or locale setting,
+ * so results may vary in a few cases from the results of strftime():
+ *
+ *  - %a, %A, %b, %B, %p, %P: Output will use SMF's language strings
+ *    to localize these values. If SMF's language strings have not
+ *    been loaded, PHP's default English strings will be used.
+ *
+ *  - %c, %x, %X: Output will always use ISO format.
+ *
+ * @param string $format A strftime() format string.
+ * @param int|null $timestamp A Unix timestamp.
+ *     If null, defaults to the current time.
+ * @param string|null $tzid Time zone identifier.
+ *     If null, uses default time zone.
+ * @return string The formatted datetime string.
+ */
+function smf_strftime(string $format, int $timestamp = null, string $tzid = null)
+{
+	global $txt, $smcFunc, $sourcedir;
+
+	static $dates = array();
+
+	// Set default values as necessary.
+	if (!isset($timestamp))
+		$timestamp = time();
+
+	if (!isset($tzid))
+		$tzid = date_default_timezone_get();
+
+	// A few substitutions to make life easier.
+	$format = strtr($format, array(
+		'%h' => '%b',
+		'%r' => '%I:%M:%S %p',
+		'%R' => '%H:%M',
+		'%T' => '%H:%M:%S',
+		'%X' => '%H:%M:%S',
+		'%D' => '%m/%d/%y',
+		'%F' => '%Y-%m-%d',
+		'%x' => '%Y-%m-%d',
+	));
+
+	// Avoid unnecessary repetition.
+	if (isset($dates[$tzid . '_' . $timestamp]['results'][$format]))
+		return $dates[$tzid . '_' . $timestamp]['results'][$format];
+
+	// Ensure the TZID is valid.
+	if (($tz = @timezone_open($tzid)) === false)
+	{
+		$tzid = date_default_timezone_get();
+
+		// Check again now that we have a valid TZID.
+		if (isset($dates[$tzid . '_' . $timestamp]['results'][$format]))
+			return $dates[$tzid . '_' . $timestamp]['results'][$format];
+
+		$tz = timezone_open($tzid);
+	}
+
+	// Create the DateTime object and set its time zone.
+	if (!isset($dates[$tzid . '_' . $timestamp]['object']))
+	{
+		$dates[$tzid . '_' . $timestamp]['object'] = date_create('@' . $timestamp);
+		date_timezone_set($dates[$tzid . '_' . $timestamp]['object'], $tz);
+	}
+
+	// In case this function is called before reloadSettings().
+	if (!isset($smcFunc['strtoupper']))
+	{
+		if (function_exists('mb_strtoupper'))
+		{
+			$smcFunc['strtoupper'] = 'mb_strtoupper';
+			$smcFunc['strtolower'] = 'mb_strtolower';
+		}
+		elseif (isset($sourcedir))
+		{
+			require_once($sourcedir . '/Subs-Charset.php');
+			$smcFunc['strtoupper'] = 'utf8_strtoupper';
+			$smcFunc['strtolower'] = 'utf8_strtolower';
+		}
+		else
+		{
+			$smcFunc['strtoupper'] = 'strtoupper';
+			$smcFunc['strtolower'] = 'strtolower';
+		}
+	}
+
+	$format_equivalents = array(
+		// Day
+		'a' => 'D', // Complex: prefer $txt strings if available.
+		'A' => 'l', // Complex: prefer $txt strings if available.
+		'e' => 'j', // Complex: sprintf to prepend whitespace.
+		'd' => 'd',
+		'j' => 'z', // Complex: must add one and then sprintf to prepend zeros.
+		'u' => 'N',
+		'w' => 'w',
+		// Week
+		'U' => 'z_w_0', // Complex: calculated from these other values.
+		'V' => 'W',
+		'W' => 'z_w_1', // Complex: calculated from these other values.
+		// Month
+		'b' => 'M', // Complex: prefer $txt strings if available.
+		'B' => 'F', // Complex: prefer $txt strings if available.
+		'm' => 'm',
+		// Year
+		'C' => 'Y', // Complex: Get 'Y' then truncate to first two digits.
+		'g' => 'o', // Complex: Get 'o' then truncate to last two digits.
+		'G' => 'o', // Complex: Get 'o' then sprintf to ensure four digits.
+		'y' => 'y',
+		'Y' => 'Y',
+		// Time
+		'H' => 'H',
+		'k' => 'G',
+		'I' => 'h',
+		'l' => 'g', // Complex: sprintf to prepend whitespace.
+		'M' => 'i',
+		'p' => 'A', // Complex: prefer $txt strings if available.
+		'P' => 'a', // Complex: prefer $txt strings if available.
+		'S' => 's',
+		'z' => 'O',
+		'Z' => 'T',
+		// Time and Date Stamps
+		'c' => 'c',
+		's' => 'U',
+		// Miscellaneous
+		'n' => "\n",
+		't' => "\t",
+		'%' => '%',
+	);
+
+	// Translate from strftime format to DateTime format.
+	$parts = preg_split('/%(' . implode('|', array_keys($format_equivalents)) . ')/', $format, 0, PREG_SPLIT_DELIM_CAPTURE);
+
+	$placeholders = array();
+	$complex = false;
+
+	for ($i = 0; $i < count($parts); $i++)
+	{
+		// Parts that are not strftime formats.
+		if ($i % 2 === 0 || !isset($format_equivalents[$parts[$i]]))
+		{
+			if ($parts[$i] === '')
+				continue;
+
+			$placeholder = "\xEE\x84\x80" . $i . "\xEE\x84\x81";
+
+			$placeholders[$placeholder] = $parts[$i];
+			$parts[$i] = $placeholder;
+		}
+		// Parts that need localized strings.
+		elseif (in_array($parts[$i], array('a', 'A', 'b', 'B')))
+		{
+			switch ($parts[$i])
+			{
+				case 'a':
+					$min = 0;
+					$max = 6;
+					$key = 'days_short';
+					$f = 'w';
+					$placeholder_end = "\xEE\x84\x83";
+
+					break;
+
+				case 'A':
+					$min = 0;
+					$max = 6;
+					$key = 'days';
+					$f = 'w';
+					$placeholder_end = "\xEE\x84\x82";
+
+					break;
+
+				case 'b':
+					$min = 1;
+					$max = 12;
+					$key = 'months_short';
+					$f = 'n';
+					$placeholder_end = "\xEE\x84\x85";
+
+					break;
+
+				case 'B':
+					$min = 1;
+					$max = 12;
+					$key = 'months';
+					$f = 'n';
+					$placeholder_end = "\xEE\x84\x84";
+
+					break;
+			}
+
+			$placeholder = "\xEE\x84\x80" . $f . $placeholder_end;
+
+			// Check whether $txt contains all expected strings.
+			// If not, use English default.
+			$txt_strings_exist = true;
+			for ($num = $min; $num <= $max; $num++)
+			{
+				if (!isset($txt[$key][$num]))
+				{
+					$txt_strings_exist = false;
+					break;
+				}
+				else
+					$placeholders[str_replace($f, $num, $placeholder)] = $txt[$key][$num];
+			}
+
+			$parts[$i] = $txt_strings_exist ? $placeholder : $format_equivalents[$parts[$i]];
+		}
+		elseif (in_array($parts[$i], array('p', 'P')))
+		{
+			if (!isset($txt['time_am']) || !isset($txt['time_pm']))
+				continue;
+
+			$placeholder = "\xEE\x84\x90" . $format_equivalents[$parts[$i]] . "\xEE\x84\x91";
+
+			switch ($parts[$i])
+			{
+				// Lower case
+				case 'p':
+					$placeholders[str_replace($format_equivalents[$parts[$i]], 'AM', $placeholder)] = $smcFunc['strtoupper']($txt['time_am']);
+					$placeholders[str_replace($format_equivalents[$parts[$i]], 'PM', $placeholder)] = $smcFunc['strtoupper']($txt['time_pm']);
+					break;
+
+				// Upper case
+				case 'P':
+					$placeholders[str_replace($format_equivalents[$parts[$i]], 'am', $placeholder)] = $smcFunc['strtolower']($txt['time_am']);
+					$placeholders[str_replace($format_equivalents[$parts[$i]], 'pm', $placeholder)] = $smcFunc['strtolower']($txt['time_pm']);
+					break;
+			}
+
+			$parts[$i] = $placeholder;
+		}
+		// Parts that will need further processing.
+		elseif (in_array($parts[$i], array('j', 'C', 'U', 'W', 'G', 'g', 'e', 'l')))
+		{
+			$complex = true;
+
+			switch ($parts[$i])
+			{
+				case 'j':
+					$placeholder_end = "\xEE\x84\xA1";
+					break;
+
+				case 'C':
+					$placeholder_end = "\xEE\x84\xA2";
+					break;
+
+				case 'U':
+				case 'W':
+					$placeholder_end = "\xEE\x84\xA3";
+					break;
+
+				case 'G':
+					$placeholder_end = "\xEE\x84\xA4";
+					break;
+
+				case 'g':
+					$placeholder_end = "\xEE\x84\xA5";
+					break;
+
+				case 'e':
+				case 'l':
+					$placeholder_end = "\xEE\x84\xA6";
+			}
+
+			$parts[$i] = "\xEE\x84\xA0" . $format_equivalents[$parts[$i]] . $placeholder_end;
+		}
+		// Parts with simple equivalents.
+		else
+			$parts[$i] = $format_equivalents[$parts[$i]];
+	}
+
+	// The main event.
+	$dates[$tzid . '_' . $timestamp]['results'][$format] = strtr(date_format($dates[$tzid . '_' . $timestamp]['object'], implode('', $parts)), $placeholders);
+
+	// Deal with the complicated ones.
+	if ($complex)
+	{
+		$dates[$tzid . '_' . $timestamp]['results'][$format] = preg_replace_callback(
+			'/\xEE\x84\xA0([\d_]+)(\xEE\x84(?:[\xA1-\xAF]))/',
+			function ($matches)
+			{
+				switch ($matches[2])
+				{
+					// %j
+					case "\xEE\x84\xA1":
+						$replacement = sprintf('%03d', (int) $matches[1] + 1);
+						break;
+
+					// %C
+					case "\xEE\x84\xA2":
+						$replacement = substr(sprintf('%04d', $matches[1]), 0, 2);
+						break;
+
+					// %U and %W
+					case "\xEE\x84\xA3":
+						list($day_of_year, $day_of_week, $first_day) = explode('_', $matches[1]);
+						$replacement = sprintf('%02d', floor(((int) $day_of_year - (int) $day_of_week + (int) $first_day) / 7) + 1);
+						break;
+
+					// %G
+					case "\xEE\x84\xA4":
+						$replacement = sprintf('%04d', $matches[1]);
+						break;
+
+					// %g
+					case "\xEE\x84\xA5":
+						$replacement = substr(sprintf('%04d', $matches[1]), -2);
+						break;
+
+					// %e and %l
+					case "\xEE\x84\xA6":
+						$replacement = sprintf('%2d', $matches[1]);
+						break;
+
+					// Shouldn't happen, but just in case...
+					default:
+						$replacement = $matches[1];
+						break;
+				}
+
+				return $replacement;
+			},
+			$dates[$tzid . '_' . $timestamp]['results'][$format]
+		);
+	}
+
+	return $dates[$tzid . '_' . $timestamp]['results'][$format];
+}
+
+/**
+ * Replacement for gmstrftime() that is compatible with PHP 8.1+.
+ *
+ * Calls smf_strftime() with the $tzid parameter set to 'UTC'.
+ *
+ * @param string $format A strftime() format string.
+ * @param int|null $timestamp A Unix timestamp.
+ *     If null, defaults to the current time.
+ * @return string The formatted datetime string.
+ */
+function smf_gmstrftime(string $format, int $timestamp = null)
+{
+	return smf_strftime($format, $timestamp, 'UTC');
 }
 
 /**
@@ -1262,28 +1419,18 @@ function shorten_subject($subject, $len)
 }
 
 /**
- * Gets the current time with offset.
+ * Deprecated function that formerly applied manual offsets to Unix timestamps
+ * in order to provide a fake version of time zone support on ancient versions
+ * of PHP. It now simply returns an unaltered timestamp.
  *
- * - always applies the offset in the time_offset setting.
- *
- * @param bool $use_user_offset Whether to apply the user's offset as well
+ * @deprecated since 2.1
+ * @param bool $use_user_offset This parameter is deprecated and nonfunctional
  * @param int $timestamp A timestamp (null to use current time)
- * @return int Seconds since the unix epoch, with forum time offset and (optionally) user time offset applied
+ * @return int Seconds since the Unix epoch
  */
 function forum_time($use_user_offset = true, $timestamp = null)
 {
-	global $user_info, $modSettings;
-
-	// Ensure required values are set
-	$modSettings['time_offset'] = !empty($modSettings['time_offset']) ? $modSettings['time_offset'] : 0;
-	$user_info['time_offset'] = !empty($user_info['time_offset']) ? $user_info['time_offset'] : 0;
-
-	if ($timestamp === null)
-		$timestamp = time();
-	elseif ($timestamp == 0)
-		return 0;
-
-	return $timestamp + ($modSettings['time_offset'] + ($use_user_offset ? $user_info['time_offset'] : 0)) * 3600;
+	return !isset($timestamp) ? time() : (int) $timestamp;
 }
 
 /**
@@ -1598,7 +1745,7 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 
 					// parseAttachBBC will return a string ($txt key) rather than dying with a fatal_error. Up to you to decide what to do.
 					if (is_string($currentAttachment))
-						return $data = !empty($txt[$currentAttachment]) ? $txt[$currentAttachment] : $currentAttachment;
+						return $data = '<span style="display:inline-block" class="errorbox">' . (!empty($txt[$currentAttachment]) ? $txt[$currentAttachment] : $currentAttachment)  . '</span>';
 
 					// We need a display mode.
 					if (empty($params['{display}']))
@@ -2591,8 +2738,8 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 					// An &nbsp; right after a URL can break the autolinker
 					if (strpos($data, '&nbsp;') !== false)
 					{
-						$placeholders[html_entity_decode('&nbsp;', null, $context['character_set'])] = '&nbsp;';
-						$data = strtr($data, array('&nbsp;' => html_entity_decode('&nbsp;', null, $context['character_set'])));
+						$placeholders[html_entity_decode('&nbsp;', 0, $context['character_set'])] = '&nbsp;';
+						$data = strtr($data, array('&nbsp;' => html_entity_decode('&nbsp;', 0, $context['character_set'])));
 					}
 
 					// Some reusable character classes
@@ -2698,16 +2845,16 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 								'(' => ')', '[' => ']', '{' => '}',
 								// Double quotation marks
 								'"' => '"',
-								html_entity_decode('&#x201C;', null, $context['character_set']) => html_entity_decode('&#x201D;', null, $context['character_set']),
-								html_entity_decode('&#x201E;', null, $context['character_set']) => html_entity_decode('&#x201D;', null, $context['character_set']),
-								html_entity_decode('&#x201F;', null, $context['character_set']) => html_entity_decode('&#x201D;', null, $context['character_set']),
-								html_entity_decode('&#x00AB;', null, $context['character_set']) => html_entity_decode('&#x00BB;', null, $context['character_set']),
+								html_entity_decode('&#x201C;', 0, $context['character_set']) => html_entity_decode('&#x201D;', 0, $context['character_set']),
+								html_entity_decode('&#x201E;', 0, $context['character_set']) => html_entity_decode('&#x201D;', 0, $context['character_set']),
+								html_entity_decode('&#x201F;', 0, $context['character_set']) => html_entity_decode('&#x201D;', 0, $context['character_set']),
+								html_entity_decode('&#x00AB;', 0, $context['character_set']) => html_entity_decode('&#x00BB;', 0, $context['character_set']),
 								// Single quotation marks
 								'\'' => '\'',
-								html_entity_decode('&#x2018;', null, $context['character_set']) => html_entity_decode('&#x2019;', null, $context['character_set']),
-								html_entity_decode('&#x201A;', null, $context['character_set']) => html_entity_decode('&#x2019;', null, $context['character_set']),
-								html_entity_decode('&#x201B;', null, $context['character_set']) => html_entity_decode('&#x2019;', null, $context['character_set']),
-								html_entity_decode('&#x2039;', null, $context['character_set']) => html_entity_decode('&#x203A;', null, $context['character_set']),
+								html_entity_decode('&#x2018;', 0, $context['character_set']) => html_entity_decode('&#x2019;', 0, $context['character_set']),
+								html_entity_decode('&#x201A;', 0, $context['character_set']) => html_entity_decode('&#x2019;', 0, $context['character_set']),
+								html_entity_decode('&#x201B;', 0, $context['character_set']) => html_entity_decode('&#x2019;', 0, $context['character_set']),
+								html_entity_decode('&#x2039;', 0, $context['character_set']) => html_entity_decode('&#x203A;', 0, $context['character_set']),
 							);
 							foreach ($balanced_pairs as $pair_opener => $pair_closer)
 								$balanced_pairs[$smcFunc['htmlspecialchars']($pair_opener)] = $smcFunc['htmlspecialchars']($pair_closer);
@@ -4899,7 +5046,7 @@ function deleteAllMinified()
 			{
 				// We want to find the most recent mtime of non-minified files
 				if (strpos(pathinfo($filename, PATHINFO_BASENAME), 'minified') === false)
-					$most_recent = max($modSettings['browser_cache'], (int) @filemtime($filename));
+					$most_recent = max($most_recent, (int) @filemtime($filename));
 
 				// Try to delete minified files. Add them to our error list if that fails.
 				elseif (!@unlink($filename))
@@ -4910,7 +5057,7 @@ function deleteAllMinified()
 	$smcFunc['db_free_result']($request);
 
 	// This setting tracks the most recent modification time of any of our CSS and JS files
-	if ($most_recent > $modSettings['browser_cache'])
+	if ($most_recent != $modSettings['browser_cache'])
 		updateSettings(array('browser_cache' => $most_recent));
 
 	// If any of the files could not be deleted, log an error about it.
@@ -5076,8 +5223,10 @@ function host_from_ip($ip)
 		return $host;
 	$t = microtime(true);
 
+	$exists = function_exists('shell_exec');
+
 	// Try the Linux host command, perhaps?
-	if (!isset($host) && (strpos(strtolower(PHP_OS), 'win') === false || strpos(strtolower(PHP_OS), 'darwin') !== false) && mt_rand(0, 1) == 1)
+	if ($exists && !isset($host) && (strpos(strtolower(PHP_OS), 'win') === false || strpos(strtolower(PHP_OS), 'darwin') !== false) && mt_rand(0, 1) == 1)
 	{
 		if (!isset($modSettings['host_to_dis']))
 			$test = @shell_exec('host -W 1 ' . @escapeshellarg($ip));
@@ -5096,7 +5245,7 @@ function host_from_ip($ip)
 	}
 
 	// This is nslookup; usually only Windows, but possibly some Unix?
-	if (!isset($host) && stripos(PHP_OS, 'win') !== false && strpos(strtolower(PHP_OS), 'darwin') === false && mt_rand(0, 1) == 1)
+	if ($exists && !isset($host) && stripos(PHP_OS, 'win') !== false && strpos(strtolower(PHP_OS), 'darwin') === false && mt_rand(0, 1) == 1)
 	{
 		$test = @shell_exec('nslookup -timeout=1 ' . @escapeshellarg($ip));
 		if (strpos($test, 'Non-existent domain') !== false)
@@ -5376,12 +5525,33 @@ function setupMenuContext()
 						'is_last' => true,
 					),
 				),
-				'is_last' => !$context['right_to_left'] && (!$user_info['is_guest'] || !$context['can_register']),
+				'is_last' => !$context['right_to_left'] && empty($settings['login_main_menu']),
+			),
+			// Theme authors: If you want the login and register buttons to appear in
+			// the main forum menu on your theme, set $settings['login_main_menu'] to
+			// true in your theme's template_init() function in index.template.php.
+			'login' => array(
+				'title' => $txt['login'],
+				'href' => $scripturl . '?action=login',
+				'onclick' => 'return reqOverlayDiv(this.href, ' . JavaScriptEscape($txt['login']) . ');',
+				'show' => $user_info['is_guest'] && !empty($settings['login_main_menu']),
+				'sub_buttons' => array(
+				),
+				'is_last' => !$context['right_to_left'],
+			),
+			'logout' => array(
+				'title' => $txt['logout'],
+				'href' => $scripturl . '?action=logout;' . $context['session_var'] . '=' . $context['session_id'],
+				'show' => !$user_info['is_guest'] && !empty($settings['login_main_menu']),
+				'sub_buttons' => array(
+				),
+				'is_last' => !$context['right_to_left'],
 			),
 			'signup' => array(
 				'title' => $txt['register'],
 				'href' => $scripturl . '?action=signup',
-				'show' => $user_info['is_guest'] && $context['can_register'],
+				'icon' => 'regcenter',
+				'show' => $user_info['is_guest'] && $context['can_register'] && !empty($settings['login_main_menu']),
 				'sub_buttons' => array(
 				),
 				'is_last' => !$context['right_to_left'],
@@ -5457,8 +5627,8 @@ function setupMenuContext()
 		$current_action = 'search';
 	elseif ($context['current_action'] == 'theme')
 		$current_action = isset($_REQUEST['sa']) && $_REQUEST['sa'] == 'pick' ? 'profile' : 'admin';
-	elseif ($context['current_action'] == 'register2')
-		$current_action = 'register';
+	elseif ($context['current_action'] == 'signup2')
+		$current_action = 'signup';
 	elseif ($context['current_action'] == 'login2' || ($user_info['is_guest'] && $context['current_action'] == 'reminder'))
 		$current_action = 'login';
 	elseif ($context['current_action'] == 'groups' && $context['allow_moderation_center'])
@@ -6578,6 +6748,8 @@ function smf_list_timezones($when = 'now')
 			$member_tzkey = $tzkey;
 		if (isset($context['event']['tz']) && $context['event']['tz'] == $tzid)
 			$event_tzkey = $tzkey;
+		if ($modSettings['default_timezone'] == $tzid)
+			$default_tzkey = $tzkey;
 	}
 
 	// Sort by current offset, then standard offset, then DST type, then label.
@@ -6641,6 +6813,8 @@ function smf_list_timezones($when = 'now')
 			$cur_profile['timezone'] = $tzvalue['tzid'];
 		if (isset($event_tzkey) && $event_tzkey == $tzkey)
 			$context['event']['tz'] = $tzvalue['tzid'];
+		if (isset($default_tzkey) && $default_tzkey == $tzkey && $modSettings['default_timezone'] != $tzvalue['tzid'])
+			updateSettings(array('default_timezone' => $tzvalue['tzid']));
 	}
 
 	if (!empty($priority_timezones))
@@ -6665,17 +6839,17 @@ function smf_list_timezones($when = 'now')
  */
 function getUserTimezone($id_member = null)
 {
-	global $smcFunc, $context, $user_info, $modSettings, $user_settings;
+	global $smcFunc, $user_info, $modSettings, $user_settings;
 	static $member_cache = array();
 
-	if (is_null($id_member) && $user_info['is_guest'] == false)
-		$id_member = $context['user']['id'];
+	if (is_null($id_member))
+		$id_member = empty($user_info['id']) ? 0 : (int) $user_info['id'];
+	else
+		$id_member = (int) $id_member;
 
 	// Did we already look this up?
-	if (isset($id_member) && isset($member_cache[$id_member]))
-	{
+	if (isset($member_cache[$id_member]))
 		return $member_cache[$id_member];
-	}
 
 	// Check if we already have this in $user_settings.
 	if (isset($user_settings['id_member']) && $user_settings['id_member'] == $id_member && !empty($user_settings['timezone']))
@@ -6684,9 +6858,9 @@ function getUserTimezone($id_member = null)
 		return $user_settings['timezone'];
 	}
 
-	// Look it up in the database.
-	if (isset($id_member))
+	if (!empty($id_member))
 	{
+		// Look it up in the database.
 		$request = $smcFunc['db_query']('', '
 			SELECT timezone
 			FROM {db_prefix}members
@@ -6704,8 +6878,7 @@ function getUserTimezone($id_member = null)
 		$timezone = isset($modSettings['default_timezone']) ? $modSettings['default_timezone'] : date_default_timezone_get();
 
 	// Save for later.
-	if (isset($id_member))
-		$member_cache[$id_member] = $timezone;
+	$member_cache[$id_member] = $timezone;
 
 	return $timezone;
 }
@@ -7150,9 +7323,8 @@ function smf_serverResponse($data = '', $type = 'content-type: application/json'
 	// Kill anything else.
 	ob_end_clean();
 
-	if (!empty($modSettings['CompressedOutput']))
+	if (!empty($modSettings['enableCompressedOutput']))
 		@ob_start('ob_gzhandler');
-
 	else
 		ob_start();
 
@@ -7212,7 +7384,7 @@ function set_tld_regex($update = false)
 			$tlds = array();
 	}
 	// If we aren't updating and the regex is valid, we're done
-	elseif (!empty($modSettings['tld_regex']) && @preg_match('~' . $modSettings['tld_regex'] . '~', null) !== false)
+	elseif (!empty($modSettings['tld_regex']) && @preg_match('~' . $modSettings['tld_regex'] . '~', '') !== false)
 	{
 		$done = true;
 		return;
@@ -7707,7 +7879,7 @@ function parse_iri($iri, $component = -1)
  * @param int $flags Optional flags to pass to filter_var()
  * @return string|bool Either the original IRI, or false if the IRI was invalid.
  */
-function validate_iri($iri, $flags = null)
+function validate_iri($iri, $flags = 0)
 {
 	$url = iri_to_url($iri);
 
@@ -7789,6 +7961,7 @@ function normalize_iri($iri)
 	}
 	else
 	{
+		$host = '';
 		$normalized_host = '';
 		$pos = 0;
 	}
@@ -7834,6 +8007,7 @@ function iri_to_url($iri)
 	}
 	else
 	{
+		$host = '';
 		$encoded_host = '';
 		$pos = 0;
 	}
@@ -8187,27 +8361,30 @@ function cleanXml($string)
 }
 
 /**
- * Escapes (replaces) characters in strings to make them safe for use in javascript
+ * Escapes (replaces) characters in strings to make them safe for use in JavaScript
  *
  * @param string $string The string to escape
+ * @param bool $as_json If true, escape as double-quoted string. Default false.
  * @return string The escaped string
  */
-function JavaScriptEscape($string)
+function JavaScriptEscape($string, $as_json = false)
 {
 	global $scripturl;
 
-	return '\'' . strtr($string, array(
+	$q = !empty($as_json) ? '"' : '\'';
+
+	return $q . strtr($string, array(
 		"\r" => '',
 		"\n" => '\\n',
 		"\t" => '\\t',
 		'\\' => '\\\\',
-		'\'' => '\\\'',
-		'</' => '<\' + \'/',
-		'<script' => '<scri\'+\'pt',
-		'<body>' => '<bo\'+\'dy>',
-		'<a href' => '<a hr\'+\'ef',
-		$scripturl => '\' + smf_scripturl + \'',
-	)) . '\'';
+		$q => addslashes($q),
+		'</' => '<' . $q . ' + ' . $q . '/',
+		'<script' => '<scri' . $q . '+' . $q . 'pt',
+		'<body>' => '<bo' . $q . '+' . $q . 'dy>',
+		'<a href' => '<a hr' . $q . '+' . $q . 'ef',
+		$scripturl => $q . ' + smf_scripturl + ' . $q,
+	)) . $q;
 }
 
 function tokenTxtReplace($stringSubject = '')

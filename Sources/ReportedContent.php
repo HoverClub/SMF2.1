@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -27,7 +27,7 @@ if (!defined('SMF'))
 function ReportedContent()
 {
 	global $txt, $context, $user_info, $smcFunc;
-	global $sourcedir, $scripturl;
+	global $sourcedir, $scripturl, $options;
 
 	// First order of business - what are these reports about?
 	// area=reported{type}
@@ -132,7 +132,7 @@ function ReportedContent()
 				'quickmod' => array(
 					'class' => 'inline_mod_check',
 					'content' => '<input type="checkbox" name="close[]" value="'.$report['id'].'">',
-					'show' => !$context['view_closed']
+					'show' => !$context['view_closed'] && !empty($options['display_quick_mod']) && $options['display_quick_mod'] == 1
 				)
 			);
 		}

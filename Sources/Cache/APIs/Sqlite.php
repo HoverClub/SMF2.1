@@ -5,10 +5,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 namespace SMF\Cache\APIs;
@@ -109,7 +109,7 @@ class Sqlite extends CacheApi implements CacheApiInterface
 	public function cleanCache($type = '')
 	{
 		if ($type == 'expired')
-			$query = 'DELETE FROM cache WHERE ttl >= ' . time() . ';';
+			$query = 'DELETE FROM cache WHERE ttl < ' . time() . ';';
 		else
 			$query = 'DELETE FROM cache;';
 
@@ -117,6 +117,8 @@ class Sqlite extends CacheApi implements CacheApiInterface
 
 		$query = 'VACUUM;';
 		$this->cacheDB->exec($query);
+
+		$this->invalidateCache();
 
 		return $result;
 	}
@@ -144,7 +146,8 @@ class Sqlite extends CacheApi implements CacheApiInterface
 		if (!isset($context['settings_post_javascript']))
 			$context['settings_post_javascript'] = '';
 
-		$context['settings_post_javascript'] .= '
+		if (empty($context['settings_not_writable']))
+			$context['settings_post_javascript'] .= '
 			$("#cache_accelerator").change(function (e) {
 				var cache_type = e.currentTarget.value;
 				$("#cachedir_'. $class_name_txt_key .'").prop("disabled", cache_type != "'. $class_name .'");

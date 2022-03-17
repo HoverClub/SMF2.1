@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.1
  */
 
 if (!defined('SMF'))
@@ -694,7 +694,7 @@ function PackageUpload()
 		@unlink($destination);
 		loadLanguage('Errors');
 		$txt[$context['package']] = str_replace('{MANAGETHEMEURL}', $scripturl . '?action=admin;area=theme;sa=admin;' . $context['session_var'] . '=' . $context['session_id'] . '#theme_install', $txt[$context['package']]);
-		fatal_lang_error('package_upload_error_broken', false, $txt[$context['package']]);
+		fatal_lang_error('package_upload_error_broken', false, array($txt[$context['package']]));
 	}
 	// Is it already uploaded, maybe?
 	elseif ($dir = @opendir($packagesdir))

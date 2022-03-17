@@ -3,10 +3,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 (function ($) {
@@ -23,6 +23,17 @@
 					for (var i = 0, n = XMLDoc.getElementsByTagName('quote')[0].childNodes.length; i < n; i++)
 						text += XMLDoc.getElementsByTagName('quote')[0].childNodes[i].nodeValue;
 					self.insert(text);
+
+					// Manually move cursor to after the quote.
+					var
+						rangeHelper = self.getRangeHelper(),
+						parent = rangeHelper.parentNode();
+					if (parent && parent.nodeName === 'BLOCKQUOTE')
+					{
+						var range = rangeHelper.selectedRange();
+						range.setStartAfter(parent);
+						rangeHelper.selectRange(range);
+					}
 
 					ajax_indicator(false);
 				}

@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -260,6 +260,9 @@ function PlushSearch2()
 		send_http_status(403);
 		die;
 	}
+	
+	if (isset($_REQUEST['start']))
+		$_REQUEST['start'] = (int) $_REQUEST['start'];
 
 	$weight_factors = array(
 		'frequency' => array(
@@ -2017,7 +2020,7 @@ function prepareSearchContext($reset = false)
 	// Remember which message this is.  (ie. reply #83)
 	static $counter = null;
 	if ($counter == null || $reset)
-		$counter = $_REQUEST['start'] + 1;
+		$counter = ((int) $_REQUEST['start']) + 1;
 
 	// If the query returned false, bail.
 	if ($messages_request == false)
@@ -2174,7 +2177,7 @@ function prepareSearchContext($reset = false)
 		'first_post' => array(
 			'id' => $message['first_msg'],
 			'time' => timeformat($message['first_poster_time']),
-			'timestamp' => forum_time(true, $message['first_poster_time']),
+			'timestamp' => $message['first_poster_time'],
 			'subject' => $message['first_subject'],
 			'href' => $scripturl . '?topic=' . $message['id_topic'] . '.0',
 			'link' => '<a href="' . $scripturl . '?topic=' . $message['id_topic'] . '.0">' . $message['first_subject'] . '</a>',
@@ -2190,7 +2193,7 @@ function prepareSearchContext($reset = false)
 		'last_post' => array(
 			'id' => $message['last_msg'],
 			'time' => timeformat($message['last_poster_time']),
-			'timestamp' => forum_time(true, $message['last_poster_time']),
+			'timestamp' => $message['last_poster_time'],
 			'subject' => $message['last_subject'],
 			'href' => $scripturl . '?topic=' . $message['id_topic'] . ($message['num_replies'] == 0 ? '.0' : '.msg' . $message['last_msg']) . '#msg' . $message['last_msg'],
 			'link' => '<a href="' . $scripturl . '?topic=' . $message['id_topic'] . ($message['num_replies'] == 0 ? '.0' : '.msg' . $message['last_msg']) . '#msg' . $message['last_msg'] . '">' . $message['last_subject'] . '</a>',
@@ -2250,11 +2253,11 @@ function prepareSearchContext($reset = false)
 		'subject' => $message['subject'],
 		'subject_highlighted' => $message['subject_highlighted'],
 		'time' => timeformat($message['poster_time']),
-		'timestamp' => forum_time(true, $message['poster_time']),
+		'timestamp' => $message['poster_time'],
 		'counter' => $counter,
 		'modified' => array(
 			'time' => timeformat($message['modified_time']),
-			'timestamp' => forum_time(true, $message['modified_time']),
+			'timestamp' => $message['modified_time'],
 			'name' => $message['modified_name']
 		),
 		'body' => $message['body'],

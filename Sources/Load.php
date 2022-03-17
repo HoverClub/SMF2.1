@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.1
  */
 
 use SMF\Cache\CacheApi;
@@ -108,11 +108,11 @@ function reloadSettings()
 	$ent_list = '&(?:#' . (empty($modSettings['disableEntityCheck']) ? '\d{1,7}' : '021') . '|quot|amp|lt|gt|nbsp);';
 	$ent_check = empty($modSettings['disableEntityCheck']) ? function($string)
 		{
-			$string = preg_replace_callback('~(&#(\d{1,7}|x[0-9a-fA-F]{1,6});)~', 'entity_fix__callback', $string);
+			$string = preg_replace_callback('~(&#(\d{1,7}|x[0-9a-fA-F]{1,6});)~', 'entity_fix__callback', (string) $string);
 			return $string;
 		} : function($string)
 		{
-			return $string;
+			return (string) $string;
 		};
 	$fix_utf8mb4 = function($string) use ($utf8, $smcFunc)
 	{
@@ -311,8 +311,11 @@ function reloadSettings()
 		// If date.timezone is unset, invalid, or just plain weird, make a best guess
 		if (!in_array($modSettings['default_timezone'], timezone_identifiers_list()))
 		{
-			$server_offset = @mktime(0, 0, 0, 1, 1, 1970);
+			$server_offset = @mktime(0, 0, 0, 1, 1, 1970) * -1;
 			$modSettings['default_timezone'] = timezone_name_from_abbr('', $server_offset, 0);
+
+			if (empty($modSettings['default_timezone']))
+				$modSettings['default_timezone'] = 'UTC';
 		}
 
 		date_default_timezone_set($modSettings['default_timezone']);
@@ -753,16 +756,28 @@ function loadUserSettings()
 		if (!empty($user_settings['timezone']))
 		{
 			// Get the offsets from UTC for the server, then for the user.
-			$tz_system = new DateTimeZone(@date_default_timezone_get());
+			$tz_system = new DateTimeZone($modSettings['default_timezone']);
 			$tz_user = new DateTimeZone($user_settings['timezone']);
 			$time_system = new DateTime('now', $tz_system);
 			$time_user = new DateTime('now', $tz_user);
-			$user_info['time_offset'] = ($tz_user->getOffset($time_user) - $tz_system->getOffset($time_system)) / 3600;
+			$user_settings['time_offset'] = ($tz_user->getOffset($time_user) - $tz_system->getOffset($time_system)) / 3600;
 		}
+		// We need a time zone.
 		else
 		{
-			// !!! Compatibility.
-			$user_info['time_offset'] = empty($user_settings['time_offset']) ? 0 : $user_settings['time_offset'];
+			if (!empty($user_settings['time_offset']))
+			{
+				$tz_system = new DateTimeZone($modSettings['default_timezone']);
+				$time_system = new DateTime('now', $tz_system);
+
+				$user_settings['timezone'] = @timezone_name_from_abbr('', $tz_system->getOffset($time_system) + $user_settings['time_offset'] * 3600, (int) $time_system->format('I'));
+			}
+
+			if (empty($user_settings['timezone']))
+			{
+				$user_settings['timezone'] = $modSettings['default_timezone'];
+				$user_settings['time_offset'] = 0;
+			}
 		}
 	}
 	// If the user is a guest, initialize all the critical user settings.
@@ -811,8 +826,8 @@ function loadUserSettings()
 			$user_info['possibly_robot'] = (strpos($_SERVER['HTTP_USER_AGENT'], 'Mozilla') === false && strpos($_SERVER['HTTP_USER_AGENT'], 'Opera') === false) || strpos($ci_user_agent, 'googlebot') !== false || strpos($ci_user_agent, 'slurp') !== false || strpos($ci_user_agent, 'crawl') !== false || strpos($ci_user_agent, 'bingbot') !== false || strpos($ci_user_agent, 'bingpreview') !== false || strpos($ci_user_agent, 'adidxbot') !== false || strpos($ci_user_agent, 'msnbot') !== false;
 		}
 
-		// We don't know the offset...
-		$user_info['time_offset'] = 0;
+		$user_settings['timezone'] = $modSettings['default_timezone'];
+		$user_settings['time_offset'] = 0;
 	}
 
 	// Set up the $user_info array.
@@ -831,6 +846,8 @@ function loadUserSettings()
 		'ip2' => $_SERVER['BAN_CHECK_IP'],
 		'posts' => empty($user_settings['posts']) ? 0 : $user_settings['posts'],
 		'time_format' => empty($user_settings['time_format']) ? $modSettings['time_format'] : $user_settings['time_format'],
+		'timezone' => $user_settings['timezone'],
+		'time_offset' => $user_settings['time_offset'],
 		'avatar' => array(
 			'url' => isset($user_settings['avatar']) ? $user_settings['avatar'] : '',
 			'filename' => empty($user_settings['filename']) ? '' : $user_settings['filename'],
@@ -901,7 +918,7 @@ function loadUserSettings()
  */
 function loadMinUserInfo($user_ids = array())
 {
-	global $smcFunc, $modSettings, $language;
+	global $smcFunc, $modSettings, $language, $modSettings;
 	static $user_info_min = array();
 
 	$user_ids = (array) $user_ids;
@@ -963,16 +980,32 @@ function loadMinUserInfo($user_ids = array())
 
 		if (!empty($row['timezone']))
 		{
-			$tz_system = new \DateTimeZone(@date_default_timezone_get());
+			$tz_system = new \DateTimeZone($modSettings['default_timezone']);
 			$tz_user = new \DateTimeZone($row['timezone']);
 			$time_system = new \DateTime('now', $tz_system);
 			$time_user = new \DateTime('now', $tz_user);
-			$user_info_min[$row['id_member']]['time_offset'] = ($tz_user->getOffset($time_user) -
+			$row['time_offset'] = ($tz_user->getOffset($time_user) -
 					$tz_system->getOffset($time_system)) / 3600;
 		}
-
 		else
-			$user_info_min[$row['id_member']]['time_offset'] = empty($row['time_offset']) ? 0 : $row['time_offset'];
+		{
+			if (!empty($row['time_offset']))
+			{
+				$tz_system = new \DateTimeZone($modSettings['default_timezone']);
+				$time_system = new \DateTime('now', $tz_system);
+
+				$row['timezone'] = @timezone_name_from_abbr('', $tz_system->getOffset($time_system) + $row['time_offset'] * 3600, (int) $time_system->format('I'));
+			}
+
+			if (empty($row['timezone']))
+			{
+				$row['timezone'] = $modSettings['default_timezone'];
+				$row['time_offset'] = 0;
+			}
+		}
+
+		$user_info_min[$row['id_member']]['timezone'] = $row['timezone'];
+		$user_info_min[$row['id_member']]['time_offset'] = $row['time_offset'];
 	}
 
 	$smcFunc['db_free_result']($request);
@@ -1660,7 +1693,7 @@ function loadMemberContext($user, $display_custom_fields = false)
 		'email' => $profile['email_address'],
 		'show_email' => !$user_info['is_guest'] && ($user_info['id'] == $profile['id_member'] || allowedTo('moderate_forum')),
 		'registered' => empty($profile['date_registered']) ? $txt['not_applicable'] : timeformat($profile['date_registered']),
-		'registered_timestamp' => empty($profile['date_registered']) ? 0 : forum_time(true, $profile['date_registered']),
+		'registered_timestamp' => empty($profile['date_registered']) ? 0 : $profile['date_registered'],
 	);
 
 	// If the set isn't minimal then load the monstrous array.
@@ -1696,17 +1729,28 @@ function loadMemberContext($user, $display_custom_fields = false)
 		if (!empty($profile['timezone']))
 		{
 			// Get the offsets from UTC for the server, then for the user.
-			$tz_system = new DateTimeZone(@date_default_timezone_get());
+			$tz_system = new DateTimeZone($modSettings['default_timezone']);
 			$tz_user = new DateTimeZone($profile['timezone']);
 			$time_system = new DateTime('now', $tz_system);
 			$time_user = new DateTime('now', $tz_user);
 			$profile['time_offset'] = ($tz_user->getOffset($time_user) - $tz_system->getOffset($time_system)) / 3600;
 		}
-
+		// We need a time zone.
 		else
 		{
-			// !!! Compatibility.
-			$profile['time_offset'] = empty($profile['time_offset']) ? 0 : $profile['time_offset'];
+			if (!empty($profile['time_offset']))
+			{
+				$tz_system = new DateTimeZone($modSettings['default_timezone']);
+				$time_system = new DateTime('now', $tz_system);
+
+				$profile['timezone'] = @timezone_name_from_abbr('', $tz_system->getOffset($time_system) + $profile['time_offset'] * 3600, (int) $time_system->format('I'));
+			}
+
+			if (empty($profile['timezone']))
+			{
+				$profile['timezone'] = $modSettings['default_timezone'];
+				$profile['time_offset'] = 0;
+			}
 		}
 
 		$memberContext[$user] += array(
@@ -1727,7 +1771,7 @@ function loadMemberContext($user, $display_custom_fields = false)
 			'real_posts' => $profile['posts'],
 			'posts' => $profile['posts'] > 500000 ? $txt['geek'] : comma_format($profile['posts']),
 			'last_login' => empty($profile['last_login']) ? $txt['never'] : timeformat($profile['last_login']),
-			'last_login_timestamp' => empty($profile['last_login']) ? 0 : forum_time(0, $profile['last_login']),
+			'last_login_timestamp' => empty($profile['last_login']) ? 0 : $profile['last_login'],
 			'ip' => $smcFunc['htmlspecialchars']($profile['member_ip']),
 			'ip2' => $smcFunc['htmlspecialchars']($profile['member_ip2']),
 			'online' => array(
@@ -1752,7 +1796,7 @@ function loadMemberContext($user, $display_custom_fields = false)
 			'group_icons' => str_repeat('<img src="' . str_replace('$language', $context['user']['language'], isset($profile['icons'][1]) ? $group_icon_url : '') . '" alt="*">', empty($profile['icons'][0]) || empty($profile['icons'][1]) ? 0 : $profile['icons'][0]),
 			'warning' => $profile['warning'],
 			'warning_status' => !empty($modSettings['warning_mute']) && $modSettings['warning_mute'] <= $profile['warning'] ? 'mute' : (!empty($modSettings['warning_moderate']) && $modSettings['warning_moderate'] <= $profile['warning'] ? 'moderate' : (!empty($modSettings['warning_watch']) && $modSettings['warning_watch'] <= $profile['warning'] ? 'watch' : (''))),
-			'local_time' => timeformat(time() + ($profile['time_offset'] - $user_info['time_offset']) * 3600, false),
+			'local_time' => timeformat(time(), false, $profile['timezone']),
 			'custom_fields' => array(),
 		);
 	}
@@ -1806,6 +1850,7 @@ function loadMemberContext($user, $display_custom_fields = false)
 				$value = $value ? $txt['yes'] : $txt['no'];
 
 			// Enclosing the user input within some other text?
+			$simple_value = $value;
 			if (!empty($custom['enclose']))
 				$value = strtr($custom['enclose'], array(
 					'{SCRIPTURL}' => $scripturl,
@@ -1819,6 +1864,7 @@ function loadMemberContext($user, $display_custom_fields = false)
 				'title' => tokenTxtReplace(!empty($custom['title']) ? $custom['title'] : $custom['col_name']),
 				'col_name' => tokenTxtReplace($custom['col_name']),
 				'value' => un_htmlspecialchars(tokenTxtReplace($value)),
+				'simple' => tokenTxtReplace($simple_value),
 				'raw' => $profile['options'][$custom['col_name']],
 				'placement' => !empty($custom['placement']) ? $custom['placement'] : 0,
 			);
@@ -2267,6 +2313,7 @@ function loadTheme($id_theme = 0, $initialize = true)
 			'ignoreusers' => array(),
 			'possibly_robot' => true,
 			'time_offset' => 0,
+			'timezone' => $modSettings['default_timezone'],
 			'time_format' => $modSettings['time_format'],
 		);
 	}
@@ -2931,33 +2978,37 @@ function addJavaScriptVar($key, $value, $escape = false)
 	// Take care of escaping the value for JavaScript?
 	if (!empty($escape))
 	{
-		if (is_null($value))
-			$value = 'null';
+		switch (gettype($value)) {
+			// Illegal.
+			case 'resource':
+				break;
 
-		elseif (is_bool($value))
-			$value = var_export($value, true);
+			// Convert PHP objects to arrays before processing.
+			case 'object':
+				$value = (array) $value;
+				// no break
 
-		elseif (is_scalar($value))
-			$value = JavaScriptEscape($value);
+			// Apply JavaScriptEscape() to any strings in the array.
+			case 'array':
+				$replacements = array();
+				array_walk_recursive(
+					$value,
+					function($v, $k) use (&$replacements)
+					{
+						if (is_string($v))
+							$replacements[json_encode($v)] = JavaScriptEscape($v, true);
+					}
+				);
+				$value = strtr(json_encode($value), $replacements);
+				break;
 
-		elseif (is_array($value))
-		{
-			$elements = array();
+			case 'string':
+				$value = JavaScriptEscape($value);
+				break;
 
-			// We only support one-dimensional arrays.
-			foreach ($value as $element)
-			{
-				if (is_null($element))
-					$elements[] = 'null';
-
-				elseif (is_bool($element))
-					$elements[] = var_export($element, true);
-
-				elseif (is_scalar($element))
-					$elements[] = JavaScriptEscape($element);
-			}
-
-			$value = '[' . implode(', ',$elements) . ']';
+			default:
+				$value = json_encode($value);
+				break;
 		}
 	}
 

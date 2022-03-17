@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -103,7 +103,7 @@ function smf_db_search_query($identifier, $db_string, $db_values = array(), $con
 
 	//fix double quotes
 	if ($identifier == 'insert_into_log_messages_fulltext')
-		$db_values = str_replace('"', "'", $db_values);
+		$db_string = str_replace('"', "'", $db_string);
 
 	$return = $smcFunc['db_query']('', $db_string,
 		$db_values, $connection

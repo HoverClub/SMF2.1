@@ -5,17 +5,17 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.1
  */
 
 // Version information...
-define('SMF_VERSION', '2.1 RC4');
+define('SMF_VERSION', '2.1.1');
 define('SMF_FULL_VERSION', 'SMF ' . SMF_VERSION);
-define('SMF_SOFTWARE_YEAR', '2021');
-define('SMF_LANG_VERSION', '2.1 RC4');
+define('SMF_SOFTWARE_YEAR', '2022');
+define('SMF_LANG_VERSION', '2.1.0');
 define('SMF_INSTALLING', 1);
 
 define('JQUERY_VERSION', '3.6.0');
@@ -113,12 +113,12 @@ $upcontext['steps'] = array(
 );
 // Just to remember which one has files in it.
 $upcontext['database_step'] = 3;
-@set_time_limit(600);
-if (!ini_get('safe_mode'))
-{
-	ini_set('mysql.connect_timeout', -1);
-	ini_set('default_socket_timeout', 900);
-}
+
+// Secure some resources
+@ini_set('mysql.connect_timeout', -1);
+@ini_set('default_socket_timeout', 900);
+@ini_set('memory_limit', '512M');
+
 // Clean the upgrade path if this is from the client.
 if (!empty($_SERVER['argv']) && php_sapi_name() == 'cli' && empty($_SERVER['REMOTE_ADDR']))
 	for ($i = 1; $i < $_SERVER['argc']; $i++)
@@ -688,6 +688,11 @@ function loadEssentialData()
 
 	require_once($sourcedir . '/Subs.php');
 
+	if (version_compare(PHP_VERSION, '8.0.0', '>='))
+		require_once($sourcedir . '/Subs-Compat.php');
+
+	@set_time_limit(600);
+
 	$smcFunc['random_int'] = function($min = 0, $max = PHP_INT_MAX)
 	{
 		global $sourcedir;
@@ -1037,6 +1042,10 @@ function WelcomeLogin()
 	// Confirm mbstring is loaded...
 	if (!extension_loaded('mbstring'))
 		return throw_error($txt['install_no_mbstring']);
+
+	// Confirm fileinfo is loaded...
+	if (!extension_loaded('fileinfo'))
+		return throw_error($txt['install_no_fileinfo']);
 
 	// Check for https stream support.
 	$supported_streams = stream_get_wrappers();
@@ -2629,7 +2638,6 @@ function cmdStep0()
 	while (ob_get_level() > 0)
 		ob_end_clean();
 	ob_implicit_flush(1);
-	@set_time_limit(600);
 
 	if (!isset($_SERVER['argv']))
 		$_SERVER['argv'] = array();
@@ -4963,11 +4971,6 @@ function MySQLConvertOldIp($targetTable, $oldCol, $newCol, $limit = 50000, $setS
 
 	$current_substep = !isset($_GET['substep']) ? 0 : (int) $_GET['substep'];
 
-	if (empty($_GET['a']))
-		$_GET['a'] = 0;
-	$step_progress['name'] = 'Converting ips';
-	$step_progress['current'] = $_GET['a'];
-
 	// Skip this if we don't have the column
 	$request = $smcFunc['db_query']('', '
 		SHOW FIELDS
@@ -4985,6 +4988,29 @@ function MySQLConvertOldIp($targetTable, $oldCol, $newCol, $limit = 50000, $setS
 	}
 	$smcFunc['db_free_result']($request);
 
+	// Setup progress bar
+	if (!isset($_GET['total_fixes']) || !isset($_GET['a']))
+	{
+		$request = $smcFunc['db_query']('', '
+			SELECT COUNT(DISTINCT {raw:old_col})
+			FROM {db_prefix}{raw:table_name}',
+			array(
+				'old_col' => $oldCol,
+				'table_name' => $targetTable,
+			)
+		);
+		list ($step_progress['total']) = $smcFunc['db_fetch_row']($request);
+		$_GET['total_fixes'] = $step_progress['total'];
+		$smcFunc['db_free_result']($request);
+
+		$_GET['a'] = 0;
+	}
+
+	$step_progress['name'] = 'Converting ips';
+	$step_progress['current'] = $_GET['a'];
+	$step_progress['total'] = $_GET['total_fixes'];
+
+	// Main process loop
 	$is_done = false;
 	while (!$is_done)
 	{
@@ -4997,9 +5023,7 @@ function MySQLConvertOldIp($targetTable, $oldCol, $newCol, $limit = 50000, $setS
 		$request = $smcFunc['db_query']('', '
 			SELECT DISTINCT {raw:old_col}
 			FROM {db_prefix}{raw:table_name}
-			WHERE {raw:new_col} IS NULL AND
-				{raw:old_col} != {string:unknown} AND
-				{raw:old_col} != {string:empty}
+			WHERE {raw:new_col} = {string:empty}
 			LIMIT {int:limit}',
 			array(
 				'old_col' => $oldCol,
@@ -5007,7 +5031,6 @@ function MySQLConvertOldIp($targetTable, $oldCol, $newCol, $limit = 50000, $setS
 				'table_name' => $targetTable,
 				'empty' => '',
 				'limit' => $limit,
-				'unknown' => 'unknown',
 			)
 		);
 		while ($row = $smcFunc['db_fetch_assoc']($request))
@@ -5015,31 +5038,28 @@ function MySQLConvertOldIp($targetTable, $oldCol, $newCol, $limit = 50000, $setS
 
 		$smcFunc['db_free_result']($request);
 
-		// Special case, null ip could keep us in a loop.
-		if (!isset($arIp[0]))
-			unset($arIp[0]);
-
 		if (empty($arIp))
 			$is_done = true;
 
 		$updates = array();
+		$new_ips = array();
 		$cases = array();
 		$count = count($arIp);
 		for ($i = 0; $i < $count; $i++)
 		{
-			$arIp[$i] = trim($arIp[$i]);
+			$new_ip = trim($arIp[$i]);
 
-			if (!filter_var($arIp[$i], FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_IPV6))
-				continue;
+			$new_ip = filter_var($new_ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4 | FILTER_FLAG_IPV6);
+			if ($new_ip === false)
+				$new_ip = '';
 
 			$updates['ip' . $i] = $arIp[$i];
-			$cases[$arIp[$i]] = 'WHEN ' . $oldCol . ' = {string:ip' . $i . '} THEN {inet:ip' . $i . '}';
+			$new_ips['newip' . $i] = $new_ip;
+			$cases[$arIp[$i]] = 'WHEN ' . $oldCol . ' = {string:ip' . $i . '} THEN {inet:newip' . $i . '}';
 
-			if ($setSize > 0 && $i % $setSize === 0)
+			// Execute updates every $setSize & also when done with contents of $arIp
+			if ((($i + 1) == $count) || (($i + 1) % $setSize === 0))
 			{
-				if (count($updates) == 1)
-					continue;
-
 				$updates['whereSet'] = array_values($updates);
 				$smcFunc['db_query']('', '
 					UPDATE {db_prefix}' . $targetTable . '
@@ -5049,54 +5069,22 @@ function MySQLConvertOldIp($targetTable, $oldCol, $newCol, $limit = 50000, $setS
 						ELSE NULL
 					END
 					WHERE ' . $oldCol . ' IN ({array_string:whereSet})',
-					$updates
+					array_merge($updates, $new_ips)
 				);
 
 				$updates = array();
+				$new_ips = array();
 				$cases = array();
 			}
 		}
-
-		// Incase some extras made it through.
-		if (!empty($updates))
-		{
-			if (count($updates) == 1)
-			{
-				foreach ($updates as $key => $ip)
-				{
-					$smcFunc['db_query']('', '
-						UPDATE {db_prefix}' . $targetTable . '
-						SET ' . $newCol . ' = {inet:ip}
-						WHERE ' . $oldCol . ' = {string:ip}',
-						array(
-							'ip' => $ip
-						)
-					);
-				}
-			}
-			else
-			{
-				$updates['whereSet'] = array_values($updates);
-				$smcFunc['db_query']('', '
-					UPDATE {db_prefix}' . $targetTable . '
-					SET ' . $newCol . ' = CASE ' .
-					implode('
-						', $cases) . '
-						ELSE NULL
-					END
-					WHERE ' . $oldCol . ' IN ({array_string:whereSet})',
-					$updates
-				);
-			}
-		}
-		else
-			$is_done = true;
 
 		$_GET['a'] += $limit;
 		$step_progress['current'] = $_GET['a'];
 	}
 
+	$step_progress = array();
 	unset($_GET['a']);
+	unset($_GET['total_fixes']);
 }
 
 /**

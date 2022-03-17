@@ -53,10 +53,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 use SMF\Cache\CacheApi;
@@ -115,13 +115,7 @@ function ModifySettings()
 	$settings_not_writable = !is_writable($boarddir . '/Settings.php');
 	$settings_backup_fail = !@is_writable($boarddir . '/Settings_bak.php') || !@copy($boarddir . '/Settings.php', $boarddir . '/Settings_bak.php');
 
-	if ($settings_not_writable)
-		$context['settings_message'] = array(
-			'label' => $txt['settings_not_writable'],
-			'tag' => 'div',
-			'class' => 'centertext strong'
-		);
-	elseif ($settings_backup_fail)
+	if ($settings_backup_fail)
 		$context['settings_message'] = array(
 			'label' => $txt['admin_backup_fail'],
 			'tag' => 'div',
@@ -152,13 +146,6 @@ function ModifyGeneralSettings($return_config = false)
 {
 	global $scripturl, $context, $txt, $modSettings, $boardurl, $sourcedir, $smcFunc;
 
-	// If no cert, force_ssl must remain 0
-	require_once($sourcedir . '/Subs.php');
-	if (!ssl_cert_found($boardurl) && empty($modSettings['force_ssl']))
-		$disable_force_ssl = true;
-	else
-		$disable_force_ssl = false;
-
 	/* If you're writing a mod, it's a bad idea to add things here....
 	For each option:
 		variable name, description, type (constant), size/possible values, helptext, optional 'min' (minimum value for float/int, defaults to 0), optional 'max' (maximum value for float/int), optional 'step' (amount to increment/decrement value for float/int)
@@ -176,7 +163,7 @@ function ModifyGeneralSettings($return_config = false)
 		array('enableCompressedOutput', $txt['enableCompressedOutput'], 'db', 'check', null, 'enableCompressedOutput'),
 		array('disableHostnameLookup', $txt['disableHostnameLookup'], 'db', 'check', null, 'disableHostnameLookup'),
 		'',
-		array('force_ssl', $txt['force_ssl'], 'db', 'select', array($txt['force_ssl_off'], $txt['force_ssl_complete']), 'force_ssl', 'disabled' => $disable_force_ssl),
+		'force_ssl' => array('force_ssl', $txt['force_ssl'], 'db', 'select', array($txt['force_ssl_off'], $txt['force_ssl_complete']), 'force_ssl'),
 		array('image_proxy_enabled', $txt['image_proxy_enabled'], 'file', 'check', null, 'image_proxy_enabled'),
 		array('image_proxy_secret', $txt['image_proxy_secret'], 'file', 'text', 30, 'image_proxy_secret'),
 		array('image_proxy_maxsize', $txt['image_proxy_maxsize'], 'file', 'int', null, 'image_proxy_maxsize'),
@@ -189,9 +176,13 @@ function ModifyGeneralSettings($return_config = false)
 	if ($return_config)
 		return $config_vars;
 
+	// If no cert, force_ssl must remain 0 (The admin search doesn't require this)
+	$config_vars['force_ssl']['disabled'] = empty($modSettings['force_ssl']) && !ssl_cert_found($boardurl);
+
 	// Setup the template stuff.
 	$context['post_url'] = $scripturl . '?action=admin;area=serversettings;sa=general;save';
 	$context['settings_title'] = $txt['general_settings'];
+	$context['save_disabled'] = $context['settings_not_writable'];
 
 	// Saving settings?
 	if (isset($_REQUEST['save']))
@@ -230,7 +221,8 @@ function ModifyGeneralSettings($return_config = false)
 	prepareServerSettingsContext($config_vars);
 
 	// Some javascript for SSL
-	addInlineJavaScript('
+	if (empty($context['settings_not_writable']))
+		addInlineJavaScript('
 $(function()
 {
 	$("#force_ssl").change(function()
@@ -476,18 +468,24 @@ function ModifyCookieSettings($return_config = false)
 	$config_vars = array(
 		// Cookies...
 		array('cookiename', $txt['cookie_name'], 'file', 'text', 20),
-		array('cookieTime', $txt['cookieTime'], 'db', 'select', array(
-			3153600 => $txt['always_logged_in'],
-			60 => $txt['one_hour'],
-			1440 => $txt['one_day'],
-			10080 => $txt['one_week'],
-			43200 => $txt['one_month'],
-		)),
+		array('cookieTime', $txt['cookieTime'], 'db', 'select', array_filter(array_map(
+			function ($str) use ($txt)
+			{
+				return isset($txt[$str]) ? $txt[$str] : '';
+			},
+			$context['login_cookie_times']
+		))),
 		array('localCookies', $txt['localCookies'], 'db', 'check', false, 'localCookies'),
 		array('globalCookies', $txt['globalCookies'], 'db', 'check', false, 'globalCookies'),
 		array('globalCookiesDomain', $txt['globalCookiesDomain'], 'db', 'text', false, 'globalCookiesDomain'),
 		array('secureCookies', $txt['secureCookies'], 'db', 'check', false, 'secureCookies', 'disabled' => !httpsOn()),
 		array('httponlyCookies', $txt['httponlyCookies'], 'db', 'check', false, 'httponlyCookies'),
+		array('samesiteCookies', $txt['samesiteCookies'], 'db', 'select', array(
+				'none' 		=> $txt['samesiteNone'],
+				'lax' 		=> $txt['samesiteLax'],
+				'strict' 	=> $txt['samesiteStrict']
+			),
+			'samesiteCookies'),
 		'',
 		// Sessions
 		array('databaseSession_enable', $txt['databaseSession_enable'], 'db', 'check', false, 'databaseSession_enable'),
@@ -520,7 +518,8 @@ function ModifyCookieSettings($return_config = false)
 
 	$("#localCookies, #globalCookies").click(function() {
 		hideGlobalCookies();
-	});', true);
+	});
+	', true);
 
 	if (empty($user_settings['tfa_secret']))
 		addInlineJavaScript('');
@@ -532,6 +531,7 @@ function ModifyCookieSettings($return_config = false)
 
 	$context['post_url'] = $scripturl . '?action=admin;area=serversettings;sa=cookie;save';
 	$context['settings_title'] = $txt['cookies_sessions_settings'];
+	$context['save_disabled'] = $context['settings_not_writable'];
 
 	// Saving settings?
 	if (isset($_REQUEST['save']))
@@ -554,6 +554,10 @@ function ModifyCookieSettings($return_config = false)
 			if (!preg_match('/(?:^|\.)' . preg_quote($_POST['globalCookiesDomain'], '/') . '$/u', parse_iri($boardurl, PHP_URL_HOST)))
 				fatal_lang_error('invalid_cookie_domain', false);
 		}
+
+		// Per spec, if samesite setting is 'none', cookies MUST be secure. Thems the rules. Else you lock everyone out...
+		if (!empty($_POST['samesiteCookies']) && ($_POST['samesiteCookies'] === 'none') && empty($_POST['secureCookies']))
+			fatal_lang_error('samesiteSecureRequired', false);
 
 		saveSettings($config_vars);
 
@@ -724,7 +728,7 @@ function ModifyGeneralSecuritySettings($return_config = false)
  */
 function ModifyCacheSettings($return_config = false)
 {
-	global $context, $scripturl, $txt;
+	global $context, $scripturl, $txt, $cacheAPI, $cache_enable, $cache_accelerator;
 
 	// Detect all available optimizers
 	$detectedCacheApis = loadCacheAPIs();
@@ -786,11 +790,16 @@ function ModifyCacheSettings($return_config = false)
 	{
 		call_integration_hook('integrate_save_cache_settings');
 
+		if (is_callable(array($cacheAPI, 'cleanCache')) && ((int) $_POST['cache_enable'] < $cache_enable || $_POST['cache_accelerator'] != $cache_accelerator))
+		{
+			$cacheAPI->cleanCache();
+		}
+
 		saveSettings($config_vars);
 		$_SESSION['adm-save'] = true;
 
 		// We need to save the $cache_enable to $modSettings as well
-		updatesettings(array('cache_enable' => (int) $_POST['cache_enable']));
+		updateSettings(array('cache_enable' => (int) $_POST['cache_enable']));
 
 		// exit so we reload our new settings on the page
 		redirectexit('action=admin;area=serversettings;sa=cache;' . $context['session_var'] . '=' . $context['session_id']);
@@ -1029,7 +1038,14 @@ function ModifyLoadBalancingSettings($return_config = false)
  */
 function prepareServerSettingsContext(&$config_vars)
 {
-	global $context, $modSettings, $smcFunc;
+	global $context, $modSettings, $smcFunc, $txt;
+
+	if ($context['settings_not_writable'])
+		$context['settings_message'] = array(
+			'label' => $txt['settings_not_writable'],
+			'tag' => 'div',
+			'class' => 'centertext strong'
+		);
 
 	if (isset($_SESSION['adm-save']))
 	{
@@ -1390,81 +1406,167 @@ function saveSettings(&$config_vars)
 		$_POST['boardurl'] = normalize_iri($_POST['boardurl']);
 	}
 
-	// Any passwords?
-	$config_passwords = array(
-		'db_passwd',
-		'ssi_db_passwd',
-	);
+	require_once($sourcedir . '/Subs-Admin.php');
 
-	// All the strings to write.
-	$config_strs = array(
-		'mtitle', 'mmessage',
-		'language', 'mbname', 'boardurl',
-		'cookiename',
-		'webmaster_email',
-		'db_name', 'db_user', 'db_server', 'db_prefix', 'ssi_db_user',
-		'boarddir', 'sourcedir',
-		'cachedir', 'cachedir_sqlite', 'cache_accelerator', 'cache_memcached',
-		'image_proxy_secret',
-	);
+	// Any passwords?
+	$config_passwords = array();
 
 	// All the numeric variables.
-	$config_ints = array(
-		'db_port',
-		'cache_enable',
-		'image_proxy_maxsize',
-	);
+	$config_nums = array();
 
 	// All the checkboxes
-	$config_bools = array('db_persist', 'db_error_send', 'maintenance', 'image_proxy_enabled');
+	$config_bools = array();
+
+	// Ones that accept multiple types (should be rare)
+	$config_multis = array();
+
+	// Get all known setting definitions and assign them to our groups above.
+	$settings_defs = get_settings_defs();
+	foreach ($settings_defs as $var => $def)
+	{
+		if (!is_string($var))
+			continue;
+
+		if (!empty($def['is_password']))
+		{
+			$config_passwords[] = $var;
+		}
+		else
+		{
+			// Special handling if multiple types are allowed.
+			if (is_array($def['type']))
+			{
+				// Obviously, we don't need null here.
+				$def['type'] = array_filter(
+					$def['type'],
+					function ($type)
+					{
+						return $type !== 'NULL';
+					}
+				);
+
+				$type = count($def['type']) == 1 ? reset($def['type']) : 'multiple';
+			}
+			else
+				$type = $def['type'];
+
+			switch ($type)
+			{
+				case 'multiple':
+					$config_multis[$var] = $def['type'];
+
+				case 'double':
+					$config_nums[] = $var;
+					break;
+
+				case 'integer':
+					// Some things saved as integers are presented as booleans
+					foreach ($config_vars as $config_var)
+					{
+						if (is_array($config_var) && $config_var[0] == $var)
+						{
+							if ($config_var[3] == 'check')
+							{
+								$config_bools[] = $var;
+								break 2;
+							}
+							else
+								break;
+						}
+					}
+					$config_nums[] = $var;
+					break;
+
+				case 'boolean':
+					$config_bools[] = $var;
+					break;
+
+				default:
+					break;
+			}
+		}
+	}
 
 	// Now sort everything into a big array, and figure out arrays and etc.
 	$new_settings = array();
 	// Figure out which config vars we're saving here...
-	foreach ($config_vars as $var)
+	foreach ($config_vars as $config_var)
 	{
-		if (!is_array($var) || $var[2] != 'file' || (!in_array($var[0], $config_bools) && !isset($_POST[$var[0]])))
+		if (!is_array($config_var) || $config_var[2] != 'file')
 			continue;
 
-		$config_var = $var[0];
+		$var_name = $config_var[0];
 
-		if (in_array($config_var, $config_passwords))
+		// Unknown setting?
+		if (!isset($settings_defs[$var_name]) && isset($config_var[3]))
 		{
-			if (isset($_POST[$config_var][1]) && $_POST[$config_var][0] == $_POST[$config_var][1])
-				$new_settings[$config_var] = $_POST[$config_var][0];
+			switch ($config_var[3])
+			{
+				case 'int':
+				case 'float':
+					$config_nums[] = $var_name;
+					break;
+
+				case 'check':
+					$config_bools[] = $var_name;
+					break;
+
+				default:
+					break;
+			}
 		}
-		elseif (in_array($config_var, $config_strs))
+
+		if (!in_array($var_name, $config_bools) && !isset($_POST[$var_name]))
+			continue;
+
+		if (in_array($var_name, $config_passwords))
 		{
-			$new_settings[$config_var] = $_POST[$config_var];
+			if (isset($_POST[$var_name][1]) && $_POST[$var_name][0] == $_POST[$var_name][1])
+				$new_settings[$var_name] = $_POST[$var_name][0];
 		}
-		elseif (in_array($config_var, $config_ints))
+		elseif (in_array($var_name, $config_nums))
 		{
-			$new_settings[$config_var] = (int) $_POST[$config_var];
+			$new_settings[$var_name] = (int) $_POST[$var_name];
 
 			// If no min is specified, assume 0. This is done to avoid having to specify 'min => 0' for all settings where 0 is the min...
-			$min = isset($var['min']) ? $var['min'] : 0;
-			$new_settings[$config_var] = max($min, $new_settings[$config_var]);
+			$min = isset($config_var['min']) ? $config_var['min'] : 0;
+			$new_settings[$var_name] = max($min, $new_settings[$var_name]);
 
 			// Is there a max value for this as well?
-			if (isset($var['max']))
-				$new_settings[$config_var] = min($var['max'], $new_settings[$config_var]);
+			if (isset($config_var['max']))
+				$new_settings[$var_name] = min($config_var['max'], $new_settings[$var_name]);
 		}
-		elseif (in_array($config_var, $config_bools))
+		elseif (in_array($var_name, $config_bools))
 		{
-			if (!empty($_POST[$config_var]))
-				$new_settings[$config_var] = 1;
-			else
-				$new_settings[$config_var] = 0;
+			$new_settings[$var_name] = !empty($_POST[$var_name]);
+		}
+		elseif (isset($config_multis[$var_name]))
+		{
+			$is_acceptable_type = false;
+
+			foreach ($config_multis[$var_name] as $type)
+			{
+				$temp = $_POST[$var_name];
+				settype($temp, $type);
+
+				if ($temp == $_POST[$var_name])
+				{
+					$new_settings[$var_name] = $temp;
+					$is_acceptable_type = true;
+					break;
+				}
+			}
+
+			if (!$is_acceptable_type)
+				fatal_error('Invalid config_var \'' . $var_name . '\'');
 		}
 		else
 		{
-			// This shouldn't happen, but it might...
-			fatal_error('Unknown config_var \'' . $config_var . '\'');
+			$new_settings[$var_name] = $_POST[$var_name];
 		}
 	}
 
 	// Save the relevant settings in the Settings.php file.
-	require_once($sourcedir . '/Subs-Admin.php');
 	updateSettingsFile($new_settings);
 
 	// Now loop through the remaining (database-based) settings.

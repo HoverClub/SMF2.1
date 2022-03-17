@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -575,7 +575,7 @@ function MLSearch()
 		}
 
 		foreach ($context['custom_search_fields'] as $field)
-			$context['search_fields']['cust_' . $field['colname']] = sprintf($txt['mlist_search_by'], $field['name']);
+			$context['search_fields']['cust_' . $field['colname']] = sprintf($txt['mlist_search_by'], tokenTxtReplace($field['name']));
 
 		$context['sub_template'] = 'search';
 		$context['old_search'] = isset($_GET['search']) ? $_GET['search'] : (isset($_POST['search']) ? $smcFunc['htmlspecialchars']($_POST['search']) : '');
@@ -635,7 +635,7 @@ function printMemberListRows($request)
 
 		$context['members'][$member] = $memberContext[$member];
 		$context['members'][$member]['post_percent'] = round(($context['members'][$member]['real_posts'] * 100) / $most_posts);
-		$context['members'][$member]['registered_date'] = strftime('%Y-%m-%d', $context['members'][$member]['registered_timestamp']);
+		$context['members'][$member]['registered_date'] = smf_strftime('%Y-%m-%d', $context['members'][$member]['registered_timestamp']);
 
 		if (!empty($context['custom_profile_fields']['columns']))
 		{

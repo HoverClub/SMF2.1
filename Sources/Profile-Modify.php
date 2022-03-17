@@ -9,10 +9,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -137,7 +137,7 @@ function loadProfileFields($force_reload = false)
 		),
 		'date_registered' => array(
 			'type' => 'date',
-			'value' => empty($cur_profile['date_registered']) ? $txt['not_applicable'] : strftime('%Y-%m-%d', $cur_profile['date_registered'] + ($user_info['time_offset'] + $modSettings['time_offset']) * 3600),
+			'value' => empty($cur_profile['date_registered']) ? $txt['not_applicable'] : smf_strftime('%Y-%m-%d', $cur_profile['date_registered']),
 			'label' => $txt['date_registered'],
 			'log_change' => true,
 			'permission' => 'moderate_forum',
@@ -147,12 +147,15 @@ function loadProfileFields($force_reload = false)
 				if (($value = strtotime($value)) === false)
 				{
 					$value = $cur_profile['date_registered'];
-					return $txt['invalid_registration'] . ' ' . strftime('%d %b %Y ' . (strpos($user_info['time_format'], '%H') !== false ? '%I:%M:%S %p' : '%H:%M:%S'), forum_time(false));
+					return $txt['invalid_registration'] . ' ' . smf_strftime('%d %b %Y ' . (strpos($user_info['time_format'], '%H') !== false ? '%I:%M:%S %p' : '%H:%M:%S'), time());
 				}
 
 				// As long as it doesn't equal "N/A"...
-				elseif ($value != $txt['not_applicable'] && $value != strtotime(strftime('%Y-%m-%d', $cur_profile['date_registered'] + ($user_info['time_offset'] + $modSettings['time_offset']) * 3600)))
-					$value = $value - ($user_info['time_offset'] + $modSettings['time_offset']) * 3600;
+				elseif ($value != $txt['not_applicable'] && $value != strtotime(smf_strftime('%Y-%m-%d', $cur_profile['date_registered'])))
+				{
+					$diff = $cur_profile['date_registered'] - strtotime(smf_strftime('%Y-%m-%d', $cur_profile['date_registered']));
+					$value = $value + $diff;
+				}
 
 				else
 					$value = $cur_profile['date_registered'];
@@ -594,9 +597,9 @@ function loadProfileFields($force_reload = false)
 				);
 
 				$context['member']['time_format'] = $cur_profile['time_format'];
-				$context['current_forum_time'] = timeformat(time() - $user_info['time_offset'] * 3600, false);
-				$context['current_forum_time_js'] = strftime('%Y,' . ((int) strftime('%m', time() + $modSettings['time_offset'] * 3600) - 1) . ',%d,%H,%M,%S', time() + $modSettings['time_offset'] * 3600);
-				$context['current_forum_time_hour'] = (int) strftime('%H', forum_time(false));
+				$context['current_forum_time'] = timeformat(time(), false, 'forum');
+				$context['current_forum_time_js'] = smf_strftime('%Y,' . ((int) smf_strftime('%m', time()) - 1) . ',%d,%H,%M,%S', time());
+				$context['current_forum_time_hour'] = (int) smf_strftime('%H', time());
 				return true;
 			},
 		),
@@ -963,25 +966,25 @@ function saveProfileChanges(&$profile_vars, &$post_errors, $memID)
 		'ignore_boards',
 	);
 
-	if (isset($_POST['sa']) && $_POST['sa'] == 'ignoreboards' && empty($_POST['ignore_brd']))
-		$_POST['ignore_brd'] = array();
+	if (isset($_POST['sa']) && $_POST['sa'] == 'ignoreboards' && empty($_POST['brd']))
+		$_POST['brd'] = array();
 
 	unset($_POST['ignore_boards']); // Whatever it is set to is a dirty filthy thing.  Kinda like our minds.
-	if (isset($_POST['ignore_brd']))
+	if (isset($_POST['brd']))
 	{
-		if (!is_array($_POST['ignore_brd']))
-			$_POST['ignore_brd'] = array($_POST['ignore_brd']);
+		if (!is_array($_POST['brd']))
+			$_POST['brd'] = array($_POST['brd']);
 
-		foreach ($_POST['ignore_brd'] as $k => $d)
+		foreach ($_POST['brd'] as $k => $d)
 		{
 			$d = (int) $d;
 			if ($d != 0)
-				$_POST['ignore_brd'][$k] = $d;
+				$_POST['brd'][$k] = $d;
 			else
-				unset($_POST['ignore_brd'][$k]);
+				unset($_POST['brd'][$k]);
 		}
-		$_POST['ignore_boards'] = implode(',', $_POST['ignore_brd']);
-		unset($_POST['ignore_brd']);
+		$_POST['ignore_boards'] = implode(',', $_POST['brd']);
+		unset($_POST['brd']);
 	}
 
 	// Here's where we sort out all the 'other' values...
@@ -1275,7 +1278,7 @@ function makeCustomFieldChanges($memID, $area, $sanitize = true, $returnErrors =
 				if (empty($value) && !is_numeric($value))
 					$value = '';
 
-				if ($row['mask'] == 'nohtml' && ($valueReference != strip_tags($valueReference) || $value != filter_var($value, FILTER_SANITIZE_STRING) || preg_match('/<(.+?)[\s]*\/?[\s]*>/si', $valueReference)))
+				if ($row['mask'] == 'nohtml' && ($valueReference != strip_tags($valueReference) || $value != filter_var($value, FILTER_SANITIZE_FULL_SPECIAL_CHARS) || preg_match('/<(.+?)[\s]*\/?[\s]*>/si', $valueReference)))
 				{
 					if ($returnErrors)
 						$errors[] = 'custom_field_nohtml_fail';
@@ -1407,7 +1410,7 @@ function editBuddyIgnoreLists($memID)
 	$context[$context['profile_menu_name']]['tab_data'] = array(
 		'title' => $txt['editBuddyIgnoreLists'],
 		'description' => $txt['buddy_ignore_desc'],
-		'icon' => 'profile_hd.png',
+		'icon_class' => 'main_icons profile_hd',
 		'tabs' => array(
 			'buddies' => array(),
 			'ignore' => array(),

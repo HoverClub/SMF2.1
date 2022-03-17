@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -168,7 +168,7 @@ function Who()
 			'ip' => allowedTo('moderate_forum') ? inet_dtop($row['ip']) : '',
 			// It is *going* to be today or yesterday, so why keep that information in there?
 			'time' => strtr(timeformat($row['log_time']), array($txt['today'] => '', $txt['yesterday'] => '')),
-			'timestamp' => forum_time(true, $row['log_time']),
+			'timestamp' => $row['log_time'],
 			'query' => $actions,
 			'is_hidden' => $row['show_online'] == 0,
 			'id_spider' => $row['id_spider'],
@@ -447,7 +447,7 @@ function determineActions($urls, $preferred_prefix = false)
 			loadLanguage('Errors');
 
 			if (isset($txt[$actions['error']]))
-				$error_message = str_replace('"', '&quot;', empty($actions['error_params']) ? $txt[$actions['error']] : vsprintf($txt[$actions['error']], $actions['error_params']));
+				$error_message = str_replace('"', '&quot;', empty($actions['error_params']) ? $txt[$actions['error']] : vsprintf($txt[$actions['error']], (array) $actions['error_params']));
 			elseif ($actions['error'] == 'guest_login')
 				$error_message = str_replace('"', '&quot;', $txt['who_guest_login']);
 			else
@@ -600,8 +600,11 @@ function Credits($in_admin = false)
 				array(
 					'title' => $txt['credits_groups_pm'],
 					'members' => array(
-						'Michele "Illori" Davis',
+						'Aleksi "Lex" Kilpinen',
 						// Former Project Managers
+						'Michele "Illori" Davis',
+						'Jessica "Suki" González',
+						'Will "Kindred" Wagner',
 					),
 				),
 				array(
@@ -644,15 +647,16 @@ function Credits($in_admin = false)
 					'title' => $txt['credits_groups_support'],
 					'members' => array(
 						// Lead Support Specialist
-						'Aleksi "Lex" Kilpinen',
-						// Support Specialists
 						'Will "Kindred" Wagner',
+						// Support Specialists
 						'lurkalot',
+						'shadav',
+						'Steve',
 
 						// Former Support Specialists
+						'Aleksi "Lex" Kilpinen',
 						'br360',
 						'GigaWatt',
-						'Steve',
 						'ziycon',
 						'Adam Tallon',
 						'Bigguy',
@@ -684,7 +688,7 @@ function Credits($in_admin = false)
 						// Customizers
 						'Diego Andrés',
 						'Jonathan "vbgamer45" Valentin',
-						'Mick.',
+						'Michael "Mick." Gomez',
 
 						// Former Customizers
 						'Sami "SychO" Mazouz',
@@ -703,8 +707,9 @@ function Credits($in_admin = false)
 					'title' => $txt['credits_groups_docs'],
 					'members' => array(
 						// Doc Coordinator
-						'Irisado',
+						'Michele "Illori" Davis',
 						// Doc Writers
+						'Irisado',
 
 						// Former Doc Writers
 						'AngelinaBelle',
@@ -717,11 +722,11 @@ function Credits($in_admin = false)
 					'title' => $txt['credits_groups_internationalizers'],
 					'members' => array(
 						// Lead Localizer
-						'Francisco "d3vcho" Domínguez',
-						// Localizers
 						'Nikola "Dzonny" Novaković',
+						// Localizers
 						'm4z',
 						// Former Localizers
+						'Francisco "d3vcho" Domínguez',
 						'Robert Monden',
 						'Relyana',
 					),
@@ -759,6 +764,9 @@ function Credits($in_admin = false)
 	);
 
 	// Give the translators some credit for their hard work.
+	if (!is_array($txt['translation_credits']))
+		$txt['translation_credits'] = array_filter(array_map('trim', explode(',', $txt['translation_credits'])));
+
 	if (!empty($txt['translation_credits']))
 		$context['credits'][] = array(
 			'title' => $txt['credits_groups_translation'],

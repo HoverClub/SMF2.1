@@ -5,10 +5,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -349,7 +349,7 @@ function utf8_compose($chars)
 			$lv_index = $l_index * 588 + $v_index * 28;
 			$s = 0xAC00 + $lv_index;
 
-			if ($chars[$c + 2] >= "\xE1\x86\xA8" && $chars[$c + 2] <= "\xE1\x87\x82")
+			if (isset($chars[$c + 2]) && $chars[$c + 2] >= "\xE1\x86\xA8" && $chars[$c + 2] <= "\xE1\x87\x82")
 			{
 				$t_part = $chars[$c + 2];
 				$t_index = mb_ord($t_part) - 0x11A7;

@@ -1,5 +1,5 @@
 <?php
-// Version: 2.1 RC4; Admin
+// Version: 2.1.0; Admin
 
 global $settings, $scripturl;
 
@@ -363,6 +363,7 @@ $txt['attachment_image_paranoid'] = 'Perform extensive security checks on upload
 $txt['attachmentThumbnails'] = 'Resize images when showing under posts';
 $txt['attachment_thumb_png'] = 'Save thumbnails as PNG';
 $txt['attachment_thumb_memory'] = 'Adaptive thumbnail memory';
+$txt['attachment_thumb_memory_note'] = 'If disabled, memory is limited to 128M';
 $txt['attachmentThumbWidth'] = 'Maximum width of thumbnails';
 $txt['attachmentThumbHeight'] = 'Maximum height of thumbnails';
 $txt['attachment_thumbnail_settings'] = 'Thumbnail Settings';
@@ -472,7 +473,7 @@ $txt['avatar_external_url_groups'] = 'Membergroups allowed to select an external
 $txt['avatar_select_permission'] = 'Select permissions for each group';
 $txt['avatar_download_external'] = 'Download avatar at given URL';
 $txt['option_specified_dir'] = 'Specific directory...';
-$txt['custom_avatar_dir_wrong'] = 'The Avatars directory is not valid. This will prevent avatars from working properly.';
+$txt['custom_avatar_dir_wrong'] = 'The Upload directory is not valid. This will prevent custom avatars from working properly.';
 $txt['custom_avatar_dir'] = 'Upload directory';
 $txt['custom_avatar_dir_desc'] = 'This should be a valid and writable directory, different from the server-stored directory.';
 $txt['custom_avatar_url'] = 'Upload URL';

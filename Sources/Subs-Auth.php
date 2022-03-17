@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -305,7 +305,7 @@ function adminLogin($type = 'admin')
 	obExit();
 
 	// We MUST exit at this point, because otherwise we CANNOT KNOW that the user is privileged.
-	trigger_error('Hacking attempt...', E_USER_ERROR);
+	trigger_error('No direct access...', E_USER_ERROR);
 }
 
 /**
@@ -693,7 +693,7 @@ function validateUsername($memID, $username, $return_error = false, $check_reser
 	loadLanguage('Errors');
 	$error = $errors[0];
 
-	$message = $error[0] == 'lang' ? (empty($error[3]) ? $txt[$error[1]] : vsprintf($txt[$error[1]], $error[3])) : $error[1];
+	$message = $error[0] == 'lang' ? (empty($error[3]) ? $txt[$error[1]] : vsprintf($txt[$error[1]], (array) $error[3])) : $error[1];
 	fatal_error($message, empty($error[2]) || $user_info['is_admin'] ? false : $error[2]);
 }
 
@@ -854,8 +854,9 @@ function rebuildModCache()
  * @param string $domain = ''
  * @param bool $secure = false
  * @param bool $httponly = true
+ * @param string $samesite = lax
  */
-function smf_setcookie($name, $value = '', $expire = 0, $path = '', $domain = '', $secure = null, $httponly = true)
+function smf_setcookie($name, $value = '', $expire = 0, $path = '', $domain = '', $secure = null, $httponly = true, $samesite = null)
 {
 	global $modSettings;
 
@@ -864,11 +865,23 @@ function smf_setcookie($name, $value = '', $expire = 0, $path = '', $domain = ''
 		$httponly = !empty($modSettings['httponlyCookies']);
 	if ($secure === null)
 		$secure = !empty($modSettings['secureCookies']);
+	if ($samesite === null)
+		$samesite = !empty($modSettings['samesiteCookies']) ? $modSettings['samesiteCookies'] : 'lax';
 
 	// Intercept cookie?
-	call_integration_hook('integrate_cookie', array($name, $value, $expire, $path, $domain, $secure, $httponly));
+	call_integration_hook('integrate_cookie', array($name, $value, $expire, $path, $domain, $secure, $httponly, $samesite));
 
-	return setcookie($name, $value, $expire, $path, $domain, $secure, $httponly);
+	if(PHP_VERSION_ID < 70300)
+		return setcookie($name, $value, $expire, $path . ';samesite=' . $samesite, $domain, $secure, $httponly);
+	else
+		return setcookie($name, $value, array(
+			'expires' 	=> $expire,
+			'path'		=> $path,
+			'domain' 	=> $domain,
+			'secure'	=> $secure,
+			'httponly'	=> $httponly,    
+			'samesite'	=> $samesite
+		));
 }
 
 /**

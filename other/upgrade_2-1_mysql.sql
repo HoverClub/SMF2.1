@@ -304,6 +304,18 @@ INSERT INTO {$db_prefix}settings (variable, value) VALUES ('defaultMaxListItems'
 ---}
 ---#
 
+---# Adding new "samesiteCookies" setting
+---{
+	if (!isset($modSettings['samesiteCookies']))
+		$smcFunc['db_insert']('insert',
+			'{db_prefix}settings',
+			array('variable' => 'string', 'value' => 'string'),
+			array('samesiteCookies', 'lax'),
+			array()
+		);
+---}
+---#
+
 ---# Calculate appropriate hash cost
 ---{
 	$smcFunc['db_insert']('replace',
@@ -390,7 +402,7 @@ if (!is_writable($custom_av_dir))
 }
 
 // If we already are using a custom dir, delete the predefined one.
-if ($custom_av_dir != $GLOBALS['boarddir'] .'/custom_avatar')
+if (realpath($custom_av_dir) != realpath($GLOBALS['boarddir'] .'/custom_avatar'))
 {
 	// Borrow custom_avatars index.php file.
 	if (!file_exists($custom_av_dir . '/index.php'))
@@ -424,7 +436,7 @@ if (!empty($modSettings['currentAttachmentUploadDir']) && !is_array($modSettings
 	$modSettings['attachmentUploadDir'] = @unserialize($modSettings['attachmentUploadDir']);
 
 // No need to do this if we already did it previously...
-if (empty($modSettings['json_done']))
+if (empty($modSettings['attachments_21_done']))
   $is_done = false;
 else
   $is_done = true;
@@ -551,6 +563,10 @@ unset($_GET['a']);
 ---}
 ---#
 
+---# Note attachment conversion complete
+INSERT INTO {$db_prefix}settings (variable, value) VALUES ('attachments_21_done', '1');
+---#
+
 ---# Fixing invalid sizes on attachments
 ---{
 $attachs = array();
@@ -585,40 +601,42 @@ if (!empty($attachs))
 
 ---# Fixing attachment directory setting...
 ---{
-if (!is_array($modSettings['attachmentUploadDir']) && is_dir($modSettings['attachmentUploadDir']))
+// If its a directory or an array, ensure it is stored as a serialized string (prep for later serial_to_json conversion)
+// Also ensure currentAttachmentUploadDir is set even for single directories
+// Make sure to do it in memory and in db...
+if (empty($modSettings['json_done']))
 {
-	$smcFunc['db_query']('', '
-		UPDATE {db_prefix}settings
-		SET value = {string:attach_dir}
-		WHERE variable = {string:uploadDir}',
-		array(
-			'attach_dir' => json_encode(array(1 => $modSettings['attachmentUploadDir'])),
-			'uploadDir' => 'attachmentUploadDir'
-		)
-	);
-	$smcFunc['db_insert']('replace',
-		'{db_prefix}settings',
-		array('variable' => 'string', 'value' => 'string'),
-		array('currentAttachmentUploadDir', '1'),
-		array('variable')
-	);
-}
-elseif (empty($modSettings['json_done']))
-{
-	// Serialized maybe?
-	$array = is_array($modSettings['attachmentUploadDir']) ? $modSettings['attachmentUploadDir'] : @unserialize($modSettings['attachmentUploadDir']);
-	if ($array !== false)
+	if (!is_array($modSettings['attachmentUploadDir']) && is_dir($modSettings['attachmentUploadDir']))
 	{
+		$modSettings['attachmentUploadDir'] = serialize(array(1 => $modSettings['attachmentUploadDir']));
 		$smcFunc['db_query']('', '
 			UPDATE {db_prefix}settings
 			SET value = {string:attach_dir}
 			WHERE variable = {string:uploadDir}',
 			array(
-				'attach_dir' => json_encode($array),
+				'attach_dir' => $modSettings['attachmentUploadDir'],
 				'uploadDir' => 'attachmentUploadDir'
 			)
 		);
-
+		$smcFunc['db_insert']('replace',
+			'{db_prefix}settings',
+			array('variable' => 'string', 'value' => 'string'),
+			array('currentAttachmentUploadDir', '1'),
+			array('variable')
+		);
+	}
+	elseif (is_array($modSettings['attachmentUploadDir']))
+	{
+		$modSettings['attachmentUploadDir'] = serialize($modSettings['attachmentUploadDir']);
+		$smcFunc['db_query']('', '
+			UPDATE {db_prefix}settings
+			SET value = {string:attach_dir}
+			WHERE variable = {string:uploadDir}',
+			array(
+				'attach_dir' => $modSettings['attachmentUploadDir'],
+				'uploadDir' => 'attachmentUploadDir'
+			)
+		);
 		// Assume currentAttachmentUploadDir is already set
 	}
 }
@@ -2365,7 +2383,38 @@ ADD COLUMN modified_reason VARCHAR(255) NOT NULL DEFAULT '';
 --- Adding timezone support
 /******************************************************************************/
 ---# Adding the "timezone" column to the members table
-ALTER TABLE {$db_prefix}members ADD timezone VARCHAR(80) NOT NULL DEFAULT 'UTC';
+ALTER TABLE {$db_prefix}members ADD timezone VARCHAR(80) NOT NULL DEFAULT '';
+---#
+
+---# Converting time offset to timezone
+---{
+	if (!empty($modSettings['time_offset']))
+	{
+		$modSettings['default_timezone'] = empty($modSettings['default_timezone']) || !in_array($modSettings['default_timezone'], timezone_identifiers_list(DateTimeZone::ALL_WITH_BC)) ? 'UTC' : $modSettings['default_timezone'];
+
+		$now = date_create('now', timezone_open($modSettings['default_timezone']));
+
+		if (($new_tzid = timezone_name_from_abbr('', date_offset_get($now) + $modSettings['time_offset'] * 3600, date_format($now, 'I'))) !== false)
+		{
+			$smcFunc['db_insert']('replace',
+				'{db_prefix}settings',
+				array('variable' => 'string-255', 'value' => 'string'),
+				array(
+					array('default_timezone', $new_tzid),
+				),
+				array('variable')
+			);
+
+			$modSettings['default_timezone'] = $new_tzid;
+		}
+
+		$smcFunc['db_query']('', '
+			DELETE FROM {db_prefix}settings
+			WHERE variable = {literal:time_offset}',
+			array()
+		);
+	}
+---}
 ---#
 
 /******************************************************************************/
@@ -2616,6 +2665,16 @@ if (in_array('member_ip_old', $results))
 ---}
 ---#
 
+---# Initialize new ip columns
+---{
+$results = $smcFunc['db_list_columns']('{db_prefix}members');
+if (in_array('member_ip_old', $results))
+{
+	upgrade_query("UPDATE {$db_prefix}members SET member_ip = '', member_ip2 = '';");
+}
+---}
+---#
+
 ---# Convert member ips
 ---{
 MySQLConvertOldIp('members','member_ip_old','member_ip');
@@ -2661,11 +2720,21 @@ ALTER TABLE {$db_prefix}messages ADD COLUMN poster_ip VARBINARY(16);
 ---{
 $doChange = true;
 $results = $smcFunc['db_list_columns']('{db_prefix}messages');
-if (!in_array('member_ip_old', $results))
+if (!in_array('poster_ip_old', $results))
 	$doChange = false;
 
 if ($doChange)
 	upgrade_query("CREATE INDEX {$db_prefix}temp_old_poster_ip ON {$db_prefix}messages (poster_ip_old);");
+---}
+---#
+
+---# Initialize new ip column
+---{
+$results = $smcFunc['db_list_columns']('{db_prefix}messages');
+if (in_array('poster_ip_old', $results))
+{
+	upgrade_query("UPDATE {$db_prefix}messages SET poster_ip = '';");
+}
 ---}
 ---#
 
@@ -3656,27 +3725,92 @@ foreach($files AS $filename)
 
 ---# Fix missing values in log_actions
 ---{
-// Find the missing id_members
-$request = upgrade_query("
-	SELECT id_action, extra
-		FROM {$db_prefix}log_actions
-		WHERE id_member = 0
-		AND action IN ('policy_accepted', 'agreement_accepted')");
+	$current_substep = !isset($_GET['substep']) ? 0 : (int) $_GET['substep'];
 
-// Fortunately they're in the extra field
-while ($row = $smcFunc['db_fetch_assoc']($request))
-{
-	$extra = @unserialize($row['extra']);
-	if ($extra === false)
-		continue;
-	if (!empty($extra['applicator']))
+	// Setup progress bar
+	if (!isset($_GET['total_fixes']) || !isset($_GET['a']) || !isset($_GET['last_action_id']))
 	{
-		upgrade_query("
-			UPDATE {$db_prefix}log_actions
-				SET id_member = " . $extra['applicator'] . "
-				WHERE id_action = " . $row['id_action']);
-	}
-}
+		$request = $smcFunc['db_query']('', '
+			SELECT COUNT(*)
+				FROM {db_prefix}log_actions
+				WHERE id_member = {int:blank_id}
+				AND action IN ({array_string:target_actions})',
+			array(
+				'blank_id' => 0,
+				'target_actions' => array('policy_accepted', 'agreement_accepted'),
+			)
+		);
+		list ($step_progress['total']) = $smcFunc['db_fetch_row']($request);
+		$_GET['total_fixes'] = $step_progress['total'];
+		$smcFunc['db_free_result']($request);
 
+		$_GET['a'] = 0;
+		$_GET['last_action_id'] = 0;
+	}
+
+	$step_progress['name'] = 'Fixing missing IDs in log_actions';
+	$step_progress['current'] = $_GET['a'];
+	$step_progress['total'] = $_GET['total_fixes'];
+
+	// Main process loop
+	$limit = 10000;
+	$is_done = false;
+	while (!$is_done)
+	{
+		// Keep looping at the current step.
+		nextSubstep($current_substep);
+
+		$extras = array();
+		$request = $smcFunc['db_query']('', '
+			SELECT id_action, extra
+				FROM {db_prefix}log_actions
+				WHERE id_member = {int:blank_id}
+				AND action IN ({array_string:target_actions})
+				AND id_action >  {int:last}
+				ORDER BY id_action
+				LIMIT {int:limit}',
+			array(
+				'blank_id' => 0,
+				'target_actions' => array('policy_accepted', 'agreement_accepted'),
+				'last' => $_GET['last_action_id'],
+				'limit' => $limit,
+			)
+		);
+		while ($row = $smcFunc['db_fetch_assoc']($request))
+			$extras[$row['id_action']] = $row['extra'];
+		$smcFunc['db_free_result']($request);
+
+		if (empty($extras))
+			$is_done = true;
+		else
+			$_GET['last_action_id'] = max(array_keys($extras));
+
+		foreach ($extras AS $id => $extra_ser)
+		{
+			$extra = upgrade_unserialize($extra_ser);
+			if ($extra === false)
+				continue;
+
+			if (!empty($extra['applicator']))
+			{
+				$request = $smcFunc['db_query']('', '
+					UPDATE {db_prefix}log_actions
+						SET id_member = {int:id_member}
+						WHERE id_action = {int:id_action}',
+					array(
+						'id_member' => $extra['applicator'],
+						'id_action' => $id,
+					)
+				);
+			}
+		}
+		$_GET['a'] += $limit;
+		$step_progress['current'] = $_GET['a'];
+	}
+
+	$step_progress = array();
+	unset($_GET['a']);
+	unset($_GET['last_action_id']);
+	unset($_GET['total_fixes']);
 ---}
 ---#

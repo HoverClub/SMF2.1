@@ -9,10 +9,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -301,7 +301,7 @@ function ModifyProfile($post_errors = array())
 					'label' => $txt['notification'],
 					'file' => 'Profile-Modify.php',
 					'function' => 'notification',
-					'icon' => 'mail',
+					'icon' => 'alerts',
 					'sc' => 'post',
 					//'token' => 'profile-nt%u', This is not checked here. We do it in the function itself - but if it was checked, this is what it'd be.
 					'subsections' => array(
@@ -582,7 +582,7 @@ function ModifyProfile($post_errors = array())
 				}
 
 				// Does this require session validating?
-				if (!empty($area['validate']) || (isset($_REQUEST['save']) && !$context['user']['is_owner'] && ($area_id != 'issuewarning' || !empty($modSettings['securityDisable_moderate']))))
+				if (!empty($area['validate']) || (isset($_REQUEST['save']) && !$context['user']['is_owner'] && ($area_id != 'issuewarning' || empty($modSettings['securityDisable_moderate']))))
 					$security_checks['validate'] = true;
 
 				// Permissions for good measure.
@@ -909,7 +909,7 @@ function profile_popup($memID)
  */
 function alerts_popup($memID)
 {
-	global $context, $sourcedir, $db_show_debug, $cur_profile;
+	global $context, $sourcedir, $db_show_debug, $cur_profile, $modSettings;
 
 	// Load the Alerts language file.
 	loadLanguage('Alerts');
@@ -922,13 +922,14 @@ function alerts_popup($memID)
 
 	// No funny business allowed
 	$counter = isset($_REQUEST['counter']) ? max(0, (int) $_REQUEST['counter']) : 0;
+	$limit = !empty($modSettings['alerts_per_page']) && (int) $modSettings['alerts_per_page'] < 1000 ? min((int) $modSettings['alerts_per_page'], 1000) : 25;
 
 	$context['unread_alerts'] = array();
 	if ($counter < $cur_profile['alerts'])
 	{
 		// Now fetch me my unread alerts, pronto!
 		require_once($sourcedir . '/Profile-View.php');
-		$context['unread_alerts'] = fetch_alerts($memID, false, !empty($counter) ? $cur_profile['alerts'] - $counter : 0, 0, !isset($_REQUEST['counter']));
+		$context['unread_alerts'] = fetch_alerts($memID, false, !empty($counter) ? $cur_profile['alerts'] - $counter : $limit, 0, !isset($_REQUEST['counter']));
 
 		// This shouldn't happen, but just in case...
 		if (empty($counter) && $cur_profile['alerts'] != count($context['unread_alerts']))

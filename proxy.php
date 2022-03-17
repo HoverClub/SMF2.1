@@ -7,23 +7,23 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.1
  */
 
 if (!defined('SMF'))
 	define('SMF', 'PROXY');
 
 if (!defined('SMF_VERSION'))
-	define('SMF_VERSION', '2.1 RC4');
+	define('SMF_VERSION', '2.1.1');
 
 if (!defined('SMF_FULL_VERSION'))
 	define('SMF_FULL_VERSION', 'SMF ' . SMF_VERSION);
 
 if (!defined('SMF_SOFTWARE_YEAR'))
-	define('SMF_SOFTWARE_YEAR', '2021');
+	define('SMF_SOFTWARE_YEAR', '2022');
 
 if (!defined('JQUERY_VERSION'))
 	define('JQUERY_VERSION', '3.6.0');
@@ -80,6 +80,10 @@ class ProxyServer
 
 		require_once(dirname(__FILE__) . '/Settings.php');
 		require_once($sourcedir . '/Subs.php');
+
+		// Ensure we don't trip over disabled internal functions
+		if (version_compare(PHP_VERSION, '8.0.0', '>='))
+			require_once($sourcedir . '/Subs-Compat.php');
 
 		// Make absolutely sure the cache directory is defined and writable.
 		if (empty($cachedir) || !is_dir($cachedir) || !is_writable($cachedir))

@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -387,7 +387,7 @@ function smf_db_query($identifier, $db_string, $db_values = array(), $connection
 	$db_count = !isset($db_count) ? 1 : $db_count + 1;
 
 	if (empty($modSettings['disableQueryCheck']) && strpos($db_string, '\'') !== false && empty($db_values['security_override']))
-		smf_db_error_backtrace('Hacking attempt...', 'Illegal character (\') used in query...', true, __FILE__, __LINE__);
+		smf_db_error_backtrace('No direct access...', 'Illegal character (\') used in query...', true, __FILE__, __LINE__);
 
 	// Use "ORDER BY null" to prevent Mysql doing filesorts for Group By clauses without an Order By
 	if (strpos($db_string, 'GROUP BY') !== false && strpos($db_string, 'ORDER BY') === false && preg_match('~^\s+SELECT~i', $db_string))
@@ -458,7 +458,7 @@ function smf_db_query($identifier, $db_string, $db_values = array(), $connection
 			$fail = true;
 
 		if (!empty($fail) && function_exists('log_error'))
-			smf_db_error_backtrace('Hacking attempt...', 'Hacking attempt...' . "\n" . $db_string, E_USER_ERROR, __FILE__, __LINE__);
+			smf_db_error_backtrace('No direct access...', 'No direct access...' . "\n" . $db_string, E_USER_ERROR, __FILE__, __LINE__);
 	}
 
 	// Debugging.
@@ -742,6 +742,9 @@ function smf_db_insert($method, $table, $columns, $data, $keys, $returnmode = 0,
 	// With nothing to insert, simply return.
 	if (empty($table) || empty($data))
 		return;
+
+	// Force method to lower case
+	$method = strtolower($method);
 
 	// Replace the prefix holder with the actual prefix.
 	$table = str_replace('{db_prefix}', $db_prefix, $table);

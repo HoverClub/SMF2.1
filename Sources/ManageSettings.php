@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -203,17 +203,8 @@ function ModifyBasicSettings($return_config = false)
 		array('text', 'meta_keywords', 'subtext' => $txt['meta_keywords_note'], 'size' => 50),
 		'',
 
-		// Number formatting, timezones.
+		// Time zone and formatting.
 		array('text', 'time_format'),
-		array(
-			'float',
-			'time_offset',
-			6,
-			'postinput' => $txt['hours'],
-			'step' => 0.25,
-			'min' => -23.5,
-			'max' => 23.5
-		),
 		array('select', 'default_timezone', array_filter(smf_list_timezones(), 'is_string', ARRAY_FILTER_USE_KEY)),
 		array('text', 'timezone_priority_countries', 'subtext' => $txt['setting_timezone_priority_countries_note']),
 		'',
@@ -242,6 +233,7 @@ function ModifyBasicSettings($return_config = false)
 				'90' => $txt['alerts_auto_purge_90'],
 			),
 		),
+		array('int', 'alerts_per_page', 'step' => 1, 'min' => 0, 'max' => 999),
 	);
 
 	call_integration_hook('integrate_modify_basic_settings', array(&$config_vars));
@@ -793,7 +785,7 @@ function ModifyAntispamSettings($return_config = false)
 		$context['question_answers'][$row['id_question']] = array(
 			'lngfile' => $lang,
 			'question' => $row['question'],
-			'answers' => $smcFunc['json_decode']($row['answers'], true),
+			'answers' => (array) $smcFunc['json_decode']($row['answers'], true),
 		);
 		$context['qa_by_lang'][$lang][] = $row['id_question'];
 	}

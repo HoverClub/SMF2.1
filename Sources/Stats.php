@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -202,7 +202,7 @@ function DisplayStats()
 		}
 	}
 
-	$date = strftime('%Y-%m-%d', forum_time(false));
+	$date = smf_strftime('%Y-%m-%d', time());
 
 	// Members online so far today.
 	$result = $smcFunc['db_query']('', '

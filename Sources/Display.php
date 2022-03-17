@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -1501,11 +1501,11 @@ function prepareDisplayContext($reset = false)
 		'icon_url' => $settings[$context['icon_sources'][$message['icon']]] . '/post/' . $message['icon'] . '.png',
 		'subject' => $message['subject'],
 		'time' => timeformat($message['poster_time']),
-		'timestamp' => forum_time(true, $message['poster_time']),
+		'timestamp' => $message['poster_time'],
 		'counter' => $counter,
 		'modified' => array(
 			'time' => timeformat($message['modified_time']),
-			'timestamp' => forum_time(true, $message['modified_time']),
+			'timestamp' => $message['modified_time'],
 			'name' => $message['modified_name'],
 			'reason' => $message['modified_reason']
 		),

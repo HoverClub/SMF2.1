@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -328,7 +328,7 @@ function Post($post_errors = array())
 		}
 
 		// Find the last day of the month.
-		$context['event']['last_day'] = (int) strftime('%d', mktime(0, 0, 0, $context['event']['month'] == 12 ? 1 : $context['event']['month'] + 1, 0, $context['event']['month'] == 12 ? $context['event']['year'] + 1 : $context['event']['year']));
+		$context['event']['last_day'] = (int) smf_strftime('%d', mktime(0, 0, 0, $context['event']['month'] == 12 ? 1 : $context['event']['month'] + 1, 0, $context['event']['month'] == 12 ? $context['event']['year'] + 1 : $context['event']['year']));
 
 		// An all day event? Set up some nice defaults in case the user wants to change that
 		if ($context['event']['allday'] == true)
@@ -1000,7 +1000,7 @@ function Post($post_errors = array())
 
 				if ($attachID == 'initial_error')
 				{
-					$txt['error_attach_initial_error'] = $txt['attach_no_upload'] . '<div style="padding: 0 1em;">' . (is_array($attachment) ? vsprintf($txt[$attachment[0]], $attachment[1]) : $txt[$attachment]) . '</div>';
+					$txt['error_attach_initial_error'] = $txt['attach_no_upload'] . '<div style="padding: 0 1em;">' . (is_array($attachment) ? vsprintf($txt[$attachment[0]], (array) $attachment[1]) : $txt[$attachment]) . '</div>';
 					$post_errors[] = 'attach_initial_error';
 					unset($_SESSION['temp_attachments']);
 					break;
@@ -1010,9 +1010,9 @@ function Post($post_errors = array())
 				if (!empty($attachment['errors']))
 				{
 					$txt['error_attach_errors'] = empty($txt['error_attach_errors']) ? '<br>' : '';
-					$txt['error_attach_errors'] .= vsprintf($txt['attach_warning'], $attachment['name']) . '<div style="padding: 0 1em;">';
+					$txt['error_attach_errors'] .= sprintf($txt['attach_warning'], $attachment['name']) . '<div style="padding: 0 1em;">';
 					foreach ($attachment['errors'] as $error)
-						$txt['error_attach_errors'] .= (is_array($error) ? vsprintf($txt[$error[0]], $error[1]) : $txt[$error]) . '<br >';
+						$txt['error_attach_errors'] .= (is_array($error) ? vsprintf($txt[$error[0]], (array) $error[1]) : $txt[$error]) . '<br >';
 					$txt['error_attach_errors'] .= '</div>';
 					$post_errors[] = 'attach_errors';
 
@@ -1098,7 +1098,7 @@ function Post($post_errors = array())
 			if (is_array($post_error))
 			{
 				$post_error_id = $post_error[0];
-				$context['post_error'][$post_error_id] = vsprintf($txt['error_' . $post_error_id], $post_error[1]);
+				$context['post_error'][$post_error_id] = vsprintf($txt['error_' . $post_error_id], (array) $post_error[1]);
 
 				// If it's not a minor error flag it as such.
 				if (!in_array($post_error_id, $minor_errors))
@@ -1234,9 +1234,18 @@ function Post($post_errors = array())
 		foreach ($attachmentRestrictionTypes as $type)
 			if (!empty($modSettings[$type]))
 			{
+				$context['attachment_restrictions'][$type] = sprintf($txt['attach_restrict_' . $type . ($modSettings[$type] >= 1024 ? '_MB' : '')], comma_format($modSettings[$type] >= 1024 ? $modSettings[$type] / 1024 : $modSettings[$type], 2));
+
 				// Show the max number of attachments if not 0.
 				if ($type == 'attachmentNumPerPostLimit')
-					$context['attachment_restrictions'][] = sprintf($txt['attach_remaining'], max($modSettings['attachmentNumPerPostLimit'] - $context['attachments']['quantity'], 0));
+				{
+					$context['attachment_restrictions'][$type] .= ' (' . sprintf($txt['attach_remaining'], max($modSettings['attachmentNumPerPostLimit'] - $context['attachments']['quantity'], 0)) . ')';
+				}
+				elseif ($type == 'attachmentPostLimit' && $context['attachments']['total_size'] > 0)
+				{
+ 					$context['attachment_restrictions'][$type] .= '<span class="attach_available"> (' . sprintf($txt['attach_available'], max($modSettings['attachmentPostLimit'] - ($context['attachments']['total_size'] / 1024), 0)) . ')</span>';
+				}
+
 			}
 	}
 
@@ -1261,7 +1270,7 @@ function Post($post_errors = array())
 	// Load the drafts js file
 	if ($context['drafts_autosave'])
 		loadJavaScriptFile('drafts.js', array('defer' => false, 'minimize' => true), 'smf_drafts');
-	
+
 	// quotedText.js
 	loadJavaScriptFile('quotedText.js', array('defer' => true, 'minimize' => true), 'smf_quotedText');
 
@@ -2183,7 +2192,7 @@ function Post2()
 			if ($attachID == 'initial_error')
 			{
 				$attach_errors[] = '<dt>' . $txt['attach_no_upload'] . '</dt>';
-				$attach_errors[] = '<dd>' . (is_array($attachment) ? vsprintf($txt[$attachment[0]], $attachment[1]) : $txt[$attachment]) . '</dd>';
+				$attach_errors[] = '<dd>' . (is_array($attachment) ? vsprintf($txt[$attachment[0]], (array) $attachment[1]) : $txt[$attachment]) . '</dd>';
 
 				unset($_SESSION['temp_attachments']);
 				break;
@@ -2216,7 +2225,7 @@ function Post2()
 			if (!empty($attachmentOptions['errors']))
 			{
 				// Sort out the errors for display and delete any associated files.
-				$attach_errors[] = '<dt>' . vsprintf($txt['attach_warning'], $attachment['name']) . '</dt>';
+				$attach_errors[] = '<dt>' . sprintf($txt['attach_warning'], $attachment['name']) . '</dt>';
 				$log_these = array('attachments_no_create', 'attachments_no_write', 'attach_timeout', 'ran_out_of_space', 'cant_access_upload_path', 'attach_0_byte_file');
 				foreach ($attachmentOptions['errors'] as $error)
 				{
@@ -2227,14 +2236,14 @@ function Post2()
 							log_error($attachment['name'] . ': ' . $txt[$error], 'critical');
 					}
 					else
-						$attach_errors[] = '<dd>' . vsprintf($txt[$error[0]], $error[1]) . '</dd>';
+						$attach_errors[] = '<dd>' . vsprintf($txt[$error[0]], (array) $error[1]) . '</dd>';
 				}
 				if (file_exists($attachment['tmp_name']))
 					unlink($attachment['tmp_name']);
 			}
 		}
-		unset($_SESSION['temp_attachments']);
 	}
+	unset($_SESSION['temp_attachments']);
 
 	// Make the poll...
 	if (isset($_REQUEST['poll']))
@@ -2309,6 +2318,8 @@ function Post2()
 		'sticky_mode' => isset($_POST['sticky']) ? (int) $_POST['sticky'] : null,
 		'mark_as_read' => true,
 		'is_approved' => !$modSettings['postmod_active'] || empty($topic) || !empty($board_info['cur_topic_approved']),
+		'first_msg' => empty($topic_info['id_first_msg']) ? null : $topic_info['id_first_msg'],
+		'last_msg' => empty($topic_info['id_last_msg']) ? null : $topic_info['id_last_msg'],
 	);
 	$posterOptions = array(
 		'id' => $user_info['id'],
@@ -2826,7 +2837,7 @@ function getTopic()
 			'poster' => $row['poster_name'],
 			'message' => $row['body'],
 			'time' => timeformat($row['poster_time']),
-			'timestamp' => forum_time(true, $row['poster_time']),
+			'timestamp' => $row['poster_time'],
 			'id' => $row['id_msg'],
 			'is_new' => !empty($context['new_replies']),
 			'is_ignored' => !empty($modSettings['enable_buddylist']) && !empty($options['posts_apply_ignore_list']) && in_array($row['id_member'], $context['user']['ignoreusers']),
@@ -3176,7 +3187,7 @@ function JavaScriptModify()
 				'id' => $row['id_msg'],
 				'modified' => array(
 					'time' => isset($msgOptions['modify_time']) ? timeformat($msgOptions['modify_time']) : '',
-					'timestamp' => isset($msgOptions['modify_time']) ? forum_time(true, $msgOptions['modify_time']) : 0,
+					'timestamp' => isset($msgOptions['modify_time']) ? $msgOptions['modify_time'] : 0,
 					'name' => isset($msgOptions['modify_time']) ? $msgOptions['modify_name'] : '',
 					'reason' => $msgOptions['modify_reason'],
 				),
@@ -3198,7 +3209,7 @@ function JavaScriptModify()
 				'id' => $row['id_msg'],
 				'modified' => array(
 					'time' => isset($msgOptions['modify_time']) ? timeformat($msgOptions['modify_time']) : '',
-					'timestamp' => isset($msgOptions['modify_time']) ? forum_time(true, $msgOptions['modify_time']) : 0,
+					'timestamp' => isset($msgOptions['modify_time']) ? $msgOptions['modify_time'] : 0,
 					'name' => isset($msgOptions['modify_time']) ? $msgOptions['modify_name'] : '',
 				),
 				'subject' => isset($msgOptions['subject']) ? $msgOptions['subject'] : '',

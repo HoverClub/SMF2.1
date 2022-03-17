@@ -12,10 +12,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -151,13 +151,13 @@ class Punycode
 							break;
 						}
 
-						$code = $t + (($q - $t) % (static::BASE - $t));
+						$code = $t + (((int) $q - $t) % (static::BASE - $t));
 						$output .= static::$encodeTable[$code];
 
 						$q = ($q - $t) / (static::BASE - $t);
 					}
 
-					$output .= static::$encodeTable[$q];
+					$output .= static::$encodeTable[(int) $q];
 					$bias = $this->adapt($delta, $h + 1, ($h === $b));
 					$delta = 0;
 					$h++;

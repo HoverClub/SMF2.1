@@ -11,10 +11,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -187,7 +187,7 @@ function sessionWrite($session_id, $data)
 		array('session_id')
 	);
 
-	return ($smcFunc['db_affected_rows']($session_update) == 0 ? false : true);
+	return ($smcFunc['db_affected_rows']() == 0 ? false : true);
 }
 
 /**
@@ -239,7 +239,7 @@ function sessionGC($max_lifetime)
 		)
 	);
 
-	return ($smcFunc['db_affected_rows']($session_update) == 0 ? false : true);
+	return ($smcFunc['db_affected_rows']() == 0 ? false : true);
 }
 
 ?>

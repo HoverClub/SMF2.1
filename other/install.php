@@ -5,15 +5,15 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.1
  */
 
-define('SMF_VERSION', '2.1 RC4');
+define('SMF_VERSION', '2.1.1');
 define('SMF_FULL_VERSION', 'SMF ' . SMF_VERSION);
-define('SMF_SOFTWARE_YEAR', '2021');
+define('SMF_SOFTWARE_YEAR', '2022');
 define('DB_SCRIPT_VERSION', '2-1');
 define('SMF_INSTALLING', 1);
 
@@ -34,6 +34,9 @@ if (!defined('SMF'))
 	define('SMF', 1);
 
 require_once('Sources/Class-Package.php');
+
+if (version_compare(PHP_VERSION, '8.0.0', '>='))
+	require_once('Sources/Subs-Compat.php');
 
 // Database info.
 $databases = array(
@@ -71,7 +74,8 @@ $databases = array(
 		'name' => 'PostgreSQL',
 		'version' => '9.6',
 		'version_check' => function() {
-			$request = pg_query('SELECT version()');
+			global $db_connection;
+			$request = pg_query($db_connection, 'SELECT version()');
 			list ($version) = pg_fetch_row($request);
 			list($pgl, $version) = explode(' ', $version);
 			return $version;
@@ -80,7 +84,8 @@ $databases = array(
 		'always_has_db' => true,
 		'utf8_support' => function()
 		{
-			$request = pg_query('SHOW SERVER_ENCODING');
+			global $db_connection;
+			$request = pg_query($db_connection, 'SHOW SERVER_ENCODING');
 
 			list ($charcode) = pg_fetch_row($request);
 
@@ -91,7 +96,8 @@ $databases = array(
 		},
 		'utf8_version' => '8.0',
 		'utf8_version_check' => function (){
-			$request = pg_query('SELECT version()');
+			global $db_connection;
+			$request = pg_query($db_connection, 'SELECT version()');
 			list ($version) = pg_fetch_row($request);
 			list($pgl, $version) = explode(' ', $version);
 			return $version;
@@ -277,8 +283,11 @@ function initialize_inputs()
 		// If date.timezone is unset, invalid, or just plain weird, make a best guess
 		if (!in_array($timezone_id, timezone_identifiers_list()))
 		{
-			$server_offset = @mktime(0, 0, 0, 1, 1, 1970);
+			$server_offset = @mktime(0, 0, 0, 1, 1, 1970) * -1;
 			$timezone_id = timezone_name_from_abbr('', $server_offset, 0);
+
+			if (empty($timezone_id))
+				$timezone_id = 'UTC';
 		}
 
 		date_default_timezone_set($timezone_id);
@@ -521,6 +530,10 @@ function Welcome()
 	// Confirm mbstring is loaded...
 	if (!extension_loaded('mbstring'))
 		$incontext['error'] = $txt['install_no_mbstring'];
+
+	// Confirm fileinfo is loaded...
+	if (!extension_loaded('fileinfo'))
+		$incontext['error'] = $txt['install_no_fileinfo'];
 
 	// Check for https stream support.
 	$supported_streams = stream_get_wrappers();
@@ -1088,7 +1101,7 @@ function ForumSettings()
 		}
 
 		// Set the character set here.
-		installer_updateSettingsFile(array('db_character_set' => 'utf8'));
+		installer_updateSettingsFile(array('db_character_set' => 'utf8'), true);
 
 		// Good, skip on.
 		return true;
@@ -1283,7 +1296,7 @@ function DatabasePopulation()
 		$current_statement = '';
 
 		// Wait, wait, I'm still working here!
-		set_time_limit(60);
+		@set_time_limit(60);
 	}
 
 	// Sort out the context for the SQL.
@@ -1363,8 +1376,11 @@ function DatabasePopulation()
 		// If date.timezone is unset, invalid, or just plain weird, make a best guess
 		if (!in_array($timezone_id, timezone_identifiers_list()))
 		{
-			$server_offset = @mktime(0, 0, 0, 1, 1, 1970);
+			$server_offset = @mktime(0, 0, 0, 1, 1, 1970) * -1;
 			$timezone_id = timezone_name_from_abbr('', $server_offset, 0);
+
+			if (empty($timezone_id))
+				$timezone_id = 'UTC';
 		}
 
 		if (date_default_timezone_set($timezone_id))
@@ -1733,7 +1749,7 @@ function DeleteInstall()
 	$smcFunc['db_insert']('ignore',
 		'{db_prefix}log_activity',
 		array('date' => 'date', 'topics' => 'int', 'posts' => 'int', 'registers' => 'int'),
-		array(strftime('%Y-%m-%d', time()), 1, 1, (!empty($incontext['member_id']) ? 1 : 0)),
+		array(smf_strftime('%Y-%m-%d', time()), 1, 1, (!empty($incontext['member_id']) ? 1 : 0)),
 		array('date')
 	);
 

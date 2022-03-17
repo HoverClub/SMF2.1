@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -174,7 +174,7 @@ function smf_db_replacement__callback($matches)
 		smf_db_error_backtrace('Invalid value inserted or no type specified.', '', E_USER_ERROR, __FILE__, __LINE__);
 
 	if ($matches[1] === 'literal')
-		return '\'' . pg_escape_string($matches[2]) . '\'';
+		return '\'' . pg_escape_string($connection, $matches[2]) . '\'';
 
 	if (!isset($values[$matches[2]]))
 		smf_db_error_backtrace('The database value you\'re trying to insert does not exist: ' . (isset($smcFunc['htmlspecialchars']) ? $smcFunc['htmlspecialchars']($matches[2]) : htmlspecialchars($matches[2])), '', E_USER_ERROR, __FILE__, __LINE__);
@@ -191,7 +191,7 @@ function smf_db_replacement__callback($matches)
 
 		case 'string':
 		case 'text':
-			return sprintf('\'%1$s\'', pg_escape_string($replacement));
+			return sprintf('\'%1$s\'', pg_escape_string($connection, $replacement));
 			break;
 
 		case 'array_int':
@@ -222,7 +222,7 @@ function smf_db_replacement__callback($matches)
 					smf_db_error_backtrace('Database error, given array of string values is empty. (' . $matches[2] . ')', '', E_USER_ERROR, __FILE__, __LINE__);
 
 				foreach ($replacement as $key => $value)
-					$replacement[$key] = sprintf('\'%1$s\'', pg_escape_string($value));
+					$replacement[$key] = sprintf('\'%1$s\'', pg_escape_string($connection, $value));
 
 				return implode(', ', $replacement);
 			}
@@ -272,7 +272,7 @@ function smf_db_replacement__callback($matches)
 				return 'null';
 			if (inet_pton($replacement) === false)
 				smf_db_error_backtrace('Wrong value type sent to the database. IPv4 or IPv6 expected.(' . $matches[2] . ')', '', E_USER_ERROR, __FILE__, __LINE__);
-			return sprintf('\'%1$s\'::inet', pg_escape_string($replacement));
+			return sprintf('\'%1$s\'::inet', pg_escape_string($connection, $replacement));
 
 		case 'array_inet':
 			if (is_array($replacement))
@@ -286,7 +286,7 @@ function smf_db_replacement__callback($matches)
 						$replacement[$key] = 'null';
 					if (!isValidIP($value))
 						smf_db_error_backtrace('Wrong value type sent to the database. IPv4 or IPv6 expected.(' . $matches[2] . ')', '', E_USER_ERROR, __FILE__, __LINE__);
-					$replacement[$key] = sprintf('\'%1$s\'::inet', pg_escape_string($value));
+					$replacement[$key] = sprintf('\'%1$s\'::inet', pg_escape_string($connection, $value));
 				}
 
 				return implode(', ', $replacement);
@@ -402,7 +402,7 @@ function smf_db_query($identifier, $db_string, $db_values = array(), $connection
 	$db_replace_result = 0;
 
 	if (empty($modSettings['disableQueryCheck']) && strpos($db_string, '\'') !== false && empty($db_values['security_override']))
-		smf_db_error_backtrace('Hacking attempt...', 'Illegal character (\') used in query...', true, __FILE__, __LINE__);
+		smf_db_error_backtrace('No direct access...', 'Illegal character (\') used in query...', true, __FILE__, __LINE__);
 
 	if (empty($db_values['security_override']) && (!empty($db_values) || strpos($db_string, '{db_prefix}') !== false))
 	{
@@ -462,7 +462,7 @@ function smf_db_query($identifier, $db_string, $db_values = array(), $connection
 			$fail = true;
 
 		if (!empty($fail) && function_exists('log_error'))
-			smf_db_error_backtrace('Hacking attempt...', 'Hacking attempt...' . "\n" . $db_string, E_USER_ERROR, __FILE__, __LINE__);
+			smf_db_error_backtrace('No direct access...', 'No direct access...' . "\n" . $db_string, E_USER_ERROR, __FILE__, __LINE__);
 	}
 
 	// Set optimize stuff
@@ -657,6 +657,9 @@ function smf_db_insert($method, $table, $columns, $data, $keys, $returnmode = 0,
 
 	if (empty($table) || empty($data))
 		return;
+
+	// Force method to lower case
+	$method = strtolower($method);
 
 	if (!is_array($data[array_rand($data)]))
 		$data = array($data);

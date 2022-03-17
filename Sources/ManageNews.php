@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2021 Simple Machines and individual contributors
+ * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1 RC4
+ * @version 2.1.0
  */
 
 if (!defined('SMF'))
@@ -485,7 +485,7 @@ function prepareMailingForPreview()
 		$context[$key] = str_replace($variables,
 			array(
 				!empty($context['send_html']) ? '<a href="' . $scripturl . '">' . $scripturl . '</a>' : $scripturl,
-				timeformat(forum_time(), false),
+				timeformat(time(), false),
 				!empty($context['send_html']) ? '<a href="' . $scripturl . '?action=profile;u=' . $modSettings['latestMember'] . '">' . $cleanLatestMember . '</a>' : ($context['send_pm'] ? '[url=' . $scripturl . '?action=profile;u=' . $modSettings['latestMember'] . ']' . $cleanLatestMember . '[/url]' : $cleanLatestMember),
 				$modSettings['latestMember'],
 				$cleanLatestMember
@@ -878,7 +878,7 @@ function SendMailing($clean_only = false)
 	$_POST['message'] = str_replace($variables,
 		array(
 			!empty($_POST['send_html']) ? '<a href="' . $scripturl . '">' . $scripturl . '</a>' : $scripturl,
-			timeformat(forum_time(), false),
+			timeformat(time(), false),
 			!empty($_POST['send_html']) ? '<a href="' . $scripturl . '?action=profile;u=' . $modSettings['latestMember'] . '">' . $cleanLatestMember . '</a>' : ($context['send_pm'] ? '[url=' . $scripturl . '?action=profile;u=' . $modSettings['latestMember'] . ']' . $cleanLatestMember . '[/url]' : $scripturl . '?action=profile;u=' . $modSettings['latestMember']),
 			$modSettings['latestMember'],
 			$cleanLatestMember
@@ -886,7 +886,7 @@ function SendMailing($clean_only = false)
 	$_POST['subject'] = str_replace($variables,
 		array(
 			$scripturl,
-			timeformat(forum_time(), false),
+			timeformat(time(), false),
 			$modSettings['latestRealName'],
 			$modSettings['latestMember'],
 			$modSettings['latestRealName']
