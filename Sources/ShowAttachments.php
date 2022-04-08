@@ -37,6 +37,7 @@ function showAttachment()
 
 	// This is done to clear any output that was made before now.
 	ob_end_clean();
+	header_remove('content-encoding');
 
 	if (!empty($modSettings['enableCompressedOutput']) && !headers_sent() && ob_get_length() == 0)
 	{
@@ -151,7 +152,7 @@ function showAttachment()
 
 				// set filePath and ETag time
 				$thumbFile['exists'] = file_exists($thumbFile['filePath']);
-				$file['filePath'] = !$thumbFile['exists'] && isset($thumbPath['extension']) ? substr($thumbFile['filePath'], 0, -(strlen($thumbPath['extension']) + 1)) : $thumbFile['filePath'];
+				$thumbFile['filePath'] = !$thumbFile['exists'] && isset($thumbPath['extension']) ? substr($thumbFile['filePath'], 0, -(strlen($thumbPath['extension']) + 1)) : $thumbFile['filePath'];
 				$thumbFile['mtime'] = $thumbFile['exists'] ? filemtime($thumbFile['filePath']) : 0;
 				$thumbFile['size'] = $thumbFile['exists'] ? filesize($thumbFile['filePath']) : 0;
 				$thumbFile['etag'] = '"' . sha1_file($thumbFile['filePath']) . '"';
@@ -241,6 +242,7 @@ function showAttachment()
 		if (!empty($file['mtime']) && strtotime($modified_since) >= $file['mtime'])
 		{
 			ob_end_clean();
+			header_remove('content-encoding');
 
 			// Answer the question - no, it hasn't been modified ;).
 			send_http_status(304);
@@ -252,6 +254,7 @@ function showAttachment()
 	if (!empty($file['etag']) && !empty($_SERVER['HTTP_IF_NONE_MATCH']) && strpos($_SERVER['HTTP_IF_NONE_MATCH'], $file['etag']) !== false)
 	{
 		ob_end_clean();
+		header_remove('content-encoding');
 
 		send_http_status(304);
 		exit;
@@ -361,6 +364,8 @@ function showAttachment()
 		while (@ob_get_level() > 0)
 			@ob_end_clean();
 
+		header_remove('content-encoding');
+
 		// 40 kilobytes is a good-ish amount
 		$chunksize = 40 * 1024;
 		$bytes_sent = 0;
@@ -385,6 +390,8 @@ function showAttachment()
 		// Forcibly end any output buffering going on.
 		while (@ob_get_level() > 0)
 			@ob_end_clean();
+
+		header_remove('content-encoding');
 
 		$fp = fopen($file['filePath'], 'rb');
 		while (!feof($fp))
