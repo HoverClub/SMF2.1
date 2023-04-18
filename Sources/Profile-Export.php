@@ -11,7 +11,7 @@
  * @copyright 2022 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.0
+ * @version 2.1.2
  */
 
 if (!defined('SMF'))
@@ -668,6 +668,10 @@ function export_attachment($uid)
 
 	// Try to avoid collisons when attachment names are not unique.
 	$context['prepend_attachment_id'] = true;
+
+	// Allow access to their attachments even if they can't see the board.
+	// This is just like what we do with posts during export.
+	$context['attachment_allow_hidden_boards'] = true;
 
 	// We should now have what we need to serve the file.
 	require_once($sourcedir . DIRECTORY_SEPARATOR . 'ShowAttachments.php');

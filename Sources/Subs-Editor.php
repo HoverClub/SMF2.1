@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2022 Simple Machines and individual contributors
+ * @copyright 2023 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.0
+ * @version 2.1.4
  */
 
 if (!defined('SMF'))
@@ -2110,9 +2110,6 @@ function create_control_verification(&$verificationOptions, $do_test = false)
 	{
 		// This cannot happen!
 		if (!isset($_SESSION[$verificationOptions['id'] . '_vv']['count']))
-			fatal_lang_error('no_access', false);
-		// ... nor this!
-		if ($thisVerification['number_questions'] && (!isset($_SESSION[$verificationOptions['id'] . '_vv']['q']) || !isset($_REQUEST[$verificationOptions['id'] . '_vv']['q'])))
 			fatal_lang_error('no_access', false);
 		// Hmm, it's requested but not actually declared. This shouldn't happen.
 		if ($thisVerification['empty_field'] && empty($_SESSION[$verificationOptions['id'] . '_vv']['empty_field']))
