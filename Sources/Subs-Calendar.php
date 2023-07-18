@@ -246,7 +246,7 @@ function getEventRange($low_date, $high_date, $use_permissions = true)
 					'topic' => $row['id_topic'],
 					'msg' => $row['id_first_msg'],
 					'poster' => $row['id_member'],
-					'allowed_groups' => explode(',', $row['member_groups']),
+					'allowed_groups' => isset($row['member_groups']) ? explode(',', $row['member_groups']) : array(),
 				));
 
 			date_add($cal_date, date_interval_create_from_date_string('1 day'));
@@ -810,6 +810,7 @@ function loadTimePicker($selector = 'input.time_input', $time_format = '')
 			decimal: "' . $txt['decimal_sign'] . '",
 			mins: "' . $txt['minutes_short'] . '",
 			hr: "' . $txt['hour_short'] . '",
+			hrs: "' . $txt['hours_short'] . '",
 		}
 	});', true);
 }
