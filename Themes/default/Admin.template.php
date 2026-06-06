@@ -4,10 +4,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2022 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.0
+ * @version 2.1.7
  */
 
 /**
@@ -979,7 +979,7 @@ function template_show_settings()
 					$max = isset($config_var['max']) ? ' max="' . $config_var['max'] . '"' : '';
 
 					echo '
-										<input type="', $type, '"', $javascript, $disabled, ' name="', $config_var['name'], '" id="', $config_var['name'], '" value="', $config_var['value'], '"', ($config_var['size'] ? ' size="' . $config_var['size'] . '"' : ''), '', $min . $max . $step, '>';
+										<input type="', $type, '"', $javascript, $disabled, ' name="', $config_var['name'], '" id="', $config_var['name'], '" value="', $config_var['value'], '"', ($config_var['size'] ? ' size="' . $config_var['size'] . '"' : ''), '', $min . $max . $step, (!empty($config_var['multiple']) ? ' multiple="multiple"' : ''), '>';
 				}
 
 				echo isset($config_var['postinput']) ? '

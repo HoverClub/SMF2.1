@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2022 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.0
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -243,9 +243,9 @@ function cleanRequest()
 		$_GET['action'] = (string) $_GET['action'];
 
 	// Some mail providers like to encode semicolons in activation URLs...
-	if (!empty($_REQUEST['action']) && substr($_SERVER['QUERY_STRING'], 0, 18) == 'action=activate%3b')
+	if (!empty($_REQUEST['action']) && substr(strtolower($_SERVER['QUERY_STRING']), 0, 18) == 'action=activate%3b')
 	{
-		header('location: ' . $scripturl . '?' . str_replace('%3b', ';', $_SERVER['QUERY_STRING']));
+		header('location: ' . $scripturl . '?' . str_ireplace('%3b', ';', $_SERVER['QUERY_STRING']));
 		exit;
 	}
 
@@ -326,13 +326,15 @@ function cleanRequest()
 				}
 
 				// Otherwise, we've got an IP!
-				$_SERVER['BAN_CHECK_IP'] = trim($ip);
+				$_SERVER['REMOTE_ADDR'] = trim($ip);
 				break;
 			}
 		}
 		// Otherwise just use the only one.
 		elseif (preg_match('~^((0|10|172\.(1[6-9]|2[0-9]|3[01])|192\.168|255|127)\.|unknown|::1|fe80::|fc00::)~', $_SERVER[$proxyIPheader]) == 0 || preg_match('~^((0|10|172\.(1[6-9]|2[0-9]|3[01])|192\.168|255|127)\.|unknown|::1|fe80::|fc00::)~', $_SERVER['REMOTE_ADDR']) != 0)
-			$_SERVER['BAN_CHECK_IP'] = $_SERVER[$proxyIPheader];
+		{
+			$_SERVER['REMOTE_ADDR'] = $_SERVER[$proxyIPheader];
+		}
 		elseif (!isValidIPv6($_SERVER[$proxyIPheader]) || preg_match('~::ffff:\d+\.\d+\.\d+\.\d+~', $_SERVER[$proxyIPheader]) !== 0)
 		{
 			$_SERVER[$proxyIPheader] = preg_replace('~^::ffff:(\d+\.\d+\.\d+\.\d+)~', '\1', $_SERVER[$proxyIPheader]);
@@ -631,15 +633,11 @@ function htmltrim__recursive($var, $level = 0)
 }
 
 /**
- * Rewrite URLs to include the session ID.
+ * Handles rewriting URLs for the queryless URLs option.
  * What it does:
- * - rewrites the URLs outputted to have the session ID, if the user
- *   is not accepting cookies and is using a standard web browser.
  * - handles rewriting URLs for the queryless URLs option.
  * - can be turned off entirely by setting $scripturl to an empty
  *   string, ''. (it wouldn't work well like that anyway.)
- * - because of bugs in certain builds of PHP, does not function in
- *   versions lower than 4.3.0 - please upgrade if this hurts you.
  *
  * @param string $buffer The unmodified output buffer
  * @return string The modified buffer
@@ -648,44 +646,27 @@ function ob_sessrewrite($buffer)
 {
 	global $scripturl, $modSettings, $context;
 
-	// If $scripturl is set to nothing, or the SID is not defined (SSI?) just quit.
-	if ($scripturl == '' || !defined('SID'))
+	// If $scripturl is set to nothing, just quit.
+	if ($scripturl == '')
 		return $buffer;
 
-	// Do nothing if the session is cookied, or they are a crawler - guests are caught by redirectexit().  This doesn't work below PHP 4.3.0, because it makes the output buffer bigger.
-	// @todo smflib
-	if (empty($_COOKIE) && SID != '' && !isBrowser('possibly_robot'))
-		$buffer = preg_replace('/(?<!<link rel="canonical" href=)"' . preg_quote($scripturl, '/') . '(?!\?' . preg_quote(SID, '/') . ')\\??/', '"' . $scripturl . '?' . SID . '&amp;', $buffer);
 	// Debugging templates, are we?
-	elseif (isset($_GET['debug']))
+	if (isset($_GET['debug']))
 		$buffer = preg_replace('/(?<!<link rel="canonical" href=)"' . preg_quote($scripturl, '/') . '\\??/', '"' . $scripturl . '?debug;', $buffer);
 
 	// This should work even in 4.2.x, just not CGI without cgi.fix_pathinfo.
 	if (!empty($modSettings['queryless_urls']) && (!$context['server']['is_cgi'] || ini_get('cgi.fix_pathinfo') == 1 || @get_cfg_var('cgi.fix_pathinfo') == 1) && ($context['server']['is_apache'] || $context['server']['is_lighttpd'] || $context['server']['is_litespeed']))
 	{
-		// Let's do something special for session ids!
-		if (defined('SID') && SID != '')
-			$buffer = preg_replace_callback(
-				'~"' . preg_quote($scripturl, '~') . '\?(?:' . SID . '(?:;|&|&amp;))((?:board|topic)=[^#"]+?)(#[^"]*?)?"~',
-				function($m)
-				{
-					global $scripturl;
+		$buffer = preg_replace_callback(
+			'~"' . preg_quote($scripturl, '~') . '\?((?:board|topic)=[^#"]+?)(#[^"]*?)?"~',
+			function($m)
+			{
+				global $scripturl;
 
-					return '"' . $scripturl . "/" . strtr("$m[1]", '&;=', '//,') . ".html?" . SID . (isset($m[2]) ? $m[2] : "") . '"';
-				},
-				$buffer
-			);
-		else
-			$buffer = preg_replace_callback(
-				'~"' . preg_quote($scripturl, '~') . '\?((?:board|topic)=[^#"]+?)(#[^"]*?)?"~',
-				function($m)
-				{
-					global $scripturl;
-
-					return '"' . $scripturl . '/' . strtr("$m[1]", '&;=', '//,') . '.html' . (isset($m[2]) ? $m[2] : "") . '"';
-				},
-				$buffer
-			);
+				return '"' . $scripturl . '/' . strtr("$m[1]", '&;=', '//,') . '.html' . (isset($m[2]) ? $m[2] : "") . '"';
+			},
+			$buffer
+		);
 	}
 
 	// Return the changed buffer.

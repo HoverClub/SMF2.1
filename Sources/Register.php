@@ -9,10 +9,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2022 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.3
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -35,6 +35,10 @@ function Register($reg_errors = array())
 	// Check if the administrator has it disabled.
 	if (!empty($modSettings['registration_method']) && $modSettings['registration_method'] == '3')
 		fatal_lang_error('registration_disabled', false);
+
+	// You cannot register with cookies disabled
+	if (empty($_COOKIE))
+		fatal_lang_error('func_cookie_error', false);
 
 	// If this user is an admin - redirect them to the admin registration page.
 	if (allowedTo('moderate_forum') && !$user_info['is_guest'])
@@ -835,7 +839,7 @@ function VerificationCode()
 	global $sourcedir, $context, $scripturl;
 
 	$verification_id = isset($_GET['vid']) ? $_GET['vid'] : '';
-	$code = $verification_id && isset($_SESSION[$verification_id . '_vv']) ? $_SESSION[$verification_id . '_vv']['code'] : (isset($_SESSION['visual_verification_code']) ? $_SESSION['visual_verification_code'] : '');
+	$code = $verification_id && isset($_SESSION[$verification_id . '_vv'], $_SESSION[$verification_id . '_vv']['code']) ? $_SESSION[$verification_id . '_vv']['code'] : (isset($_SESSION['visual_verification_code']) ? $_SESSION['visual_verification_code'] : '');
 
 	// Somehow no code was generated or the session was lost.
 	if (empty($code))

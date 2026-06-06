@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2023 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.4
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -172,7 +172,7 @@ function smf_db_create_table($table_name, $columns, $indexes = array(), $paramet
 			if (
 				$key === false
 				|| !isset($columns[$key])
-				|| !in_array($columns[$key]['type'], array('text', 'mediumntext', 'largetext', 'varchar', 'char'))
+				|| !in_array($columns[$key]['type'], array('text', 'mediumtext', 'largetext', 'varchar', 'char'))
 				|| (
 					isset($size)
 					&& $size <= 191
@@ -254,6 +254,7 @@ function smf_db_create_table($table_name, $columns, $indexes = array(), $paramet
 
 		while ($row = $smcFunc['db_fetch_assoc']($request))
 		{
+			$row = array_change_key_case($row, CASE_LOWER);
 			$same_col[] = $row['column_name'];
 		}
 
@@ -448,7 +449,7 @@ function smf_db_change_column($table_name, $old_column, $column_info)
 		$column_info['auto'] = $old_info['auto'];
 	if (!isset($column_info['type']))
 		$column_info['type'] = $old_info['type'];
-	if (!isset($column_info['size']) || !is_numeric($column_info['size']))
+	if (!array_key_exists('size', $column_info) || (!is_numeric($column_info['size']) && !is_null($column_info['size'])))
 		$column_info['size'] = $old_info['size'];
 	if (!isset($column_info['unsigned']) || !in_array($column_info['type'], array('int', 'tinyint', 'smallint', 'mediumint', 'bigint')))
 		$column_info['unsigned'] = '';
@@ -457,6 +458,13 @@ function smf_db_change_column($table_name, $old_column, $column_info)
 	// (Unspecified = no default whatsoever = column is not nullable with a value of null...)
 	if (($column_info['not_null'] === true) && !$column_info['drop_default'] && array_key_exists('default', $column_info) && is_null($column_info['default']))
 		unset($column_info['default']);
+
+	// These types cannot have a default value.
+	if (in_array($column_info['type'], ['text', 'tinytext', 'mediumtext', 'longtext', 'blob', 'tinyblob', 'mediumblob', 'longblob', 'json', 'geometry']))
+	{
+		$column_info['drop_default'] = true;
+		unset($column_info['default']);
+	}
 
 	list ($type, $size) = $smcFunc['db_calculate_type']($column_info['type'], $column_info['size']);
 
@@ -534,7 +542,7 @@ function smf_db_add_index($table_name, $index_info, $parameters = array(), $if_e
 		// If a size was already specified, we won't be able to match it anyways.
 		if (
 			!isset($cols[$c])
-			|| !in_array($cols[$c]['type'], array('text', 'mediumntext', 'largetext', 'varchar', 'char'))
+			|| !in_array($cols[$c]['type'], array('text', 'mediumtext', 'largetext', 'varchar', 'char'))
 			|| (
 				isset($size)
 				&& $size <= 191
@@ -696,8 +704,15 @@ function smf_db_calculate_type($type_name, $type_size = null, $reverse = false)
 		else
 			$type_name = $types[$type_name];
 	}
-	elseif ($type_name == 'boolean')
+
+	if (
+		// We can't have a zero size.
+		$type_size === 0
+		// Always set size to null for types that don't use them.
+		|| in_array($type_name, ['boolean', 'bool', 'integer', 'int', 'tinyint', 'smallint', 'mediumint', 'bigint', 'tinytext', 'mediumtext', 'longtext', 'tinyblob', 'mediumblob', 'longblob', 'enum', 'set', 'json', 'geometry'])
+	) {
 		$type_size = null;
+	}
 
 	return array($type_name, $type_size);
 }
@@ -890,6 +905,13 @@ function smf_db_create_query_column($column)
 	global $smcFunc;
 
 	$column = array_change_key_case($column);
+
+	// These types cannot have a default value.
+	if (in_array($column['type'], ['text', 'tinytext', 'mediumtext', 'longtext', 'blob', 'tinyblob', 'mediumblob', 'longblob', 'json', 'geometry']))
+	{
+		$column['drop_default'] = true;
+		unset($column['default']);
+	}
 
 	// Auto increment is easy here!
 	if (!empty($column['auto']))

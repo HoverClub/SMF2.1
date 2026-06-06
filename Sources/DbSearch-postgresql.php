@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2023 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.4
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -65,12 +65,6 @@ function smf_db_search_query($identifier, $db_string, $db_values = array(), $con
 	global $smcFunc;
 
 	$replacements = array(
-		'create_tmp_log_search_topics' => array(
-			'~ENGINE=MEMORY~i' => '',
-		),
-		'create_tmp_log_search_messages' => array(
-			'~ENGINE=MEMORY~i' => '',
-		),
 		'insert_into_log_messages_fulltext' => array(
 			'/NOT\sLIKE/' => 'NOT ILIKE',
 			'/\bLIKE\b/' => 'ILIKE',

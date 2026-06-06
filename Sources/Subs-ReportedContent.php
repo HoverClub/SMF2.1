@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2022 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.3
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -640,6 +640,11 @@ function saveModComment($report_id, $data)
 	if (empty($data))
 		return false;
 
+	$report = getReportDetails($report_id);
+
+	if (empty($report))
+		return false;
+
 	$data = array_merge(array($user_info['id'], $user_info['name'], 'reportc', ''), $data);
 
 	$last_comment = $smcFunc['db_insert']('',
@@ -652,8 +657,6 @@ function saveModComment($report_id, $data)
 		array('id_comment'),
 		1
 	);
-
-	$report = getReportDetails($report_id);
 
 	if ($context['report_type'] == 'members')
 	{

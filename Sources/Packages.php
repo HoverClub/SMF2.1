@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2022 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.0
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -663,7 +663,7 @@ function PackageInstallTest()
 		}
 
 		// Don't fail if a file/directory we're trying to create doesn't exist...
-		if (isset($action['filename']) && !file_exists($file) && !in_array($action['type'], array('create-dir', 'create-file')))
+		if (isset($action['filename']) && !file_exists($file) && !in_array($action['type'], array('create-dir', 'create-file', 'move-dir', 'move-file')) && $action['error'] != 'ignore')
 		{
 			$context['has_failure'] = true;
 
@@ -982,6 +982,10 @@ function PackageInstall()
 	if (!isset($old_version) || $context['is_installed'])
 		$install_log = parsePackageInfo($packageInfo['xml'], false, 'install');
 
+	// Disable background tasks while the code is in flux.
+	require_once($sourcedir . '/Subs-Admin.php');
+	updateSettingsFile(['package_installing' => true]);
+
 	$context['install_finished'] = false;
 
 	// @todo Make a log of any errors that occurred and output them?
@@ -1269,6 +1273,9 @@ function PackageInstall()
 
 	// Restore file permissions?
 	create_chmod_control(array(), array(), true);
+
+	// Resume background tasks.
+	updateSettingsFile(['package_installing' => null]);
 }
 
 /**
@@ -1343,7 +1350,7 @@ function ExamineFile()
 	$context['filename'] = $_REQUEST['file'];
 
 	// Let the unpacker do the work.... but make sure we handle images properly.
-	if (in_array(strtolower(strrchr($_REQUEST['file'], '.')), array('.bmp', '.gif', '.jpeg', '.jpg', '.png')))
+	if (in_array(strtolower(strrchr($_REQUEST['file'], '.')), array('.bmp', '.gif', '.jpeg', '.jpg', '.png', '.webp')))
 		$context['filedata'] = '<img src="' . $scripturl . '?action=admin;area=packages;sa=examine;package=' . $_REQUEST['package'] . ';file=' . $_REQUEST['file'] . ';raw" alt="' . $_REQUEST['file'] . '">';
 	else
 	{

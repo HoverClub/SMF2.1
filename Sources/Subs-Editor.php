@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2023 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.4
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -916,8 +916,8 @@ function html_to_bbc($text)
 			// External URL?
 			if ($attrib == 'target' && $tag_type == 'url')
 			{
-				if (trim($value) == '_blank')
-					$tag_type == 'iurl';
+				if (trim($value) != '_blank')
+					$tag_type = 'iurl';
 			}
 		}
 
@@ -1289,7 +1289,7 @@ function legalise_bbc($text)
 								break;
 
 							// Still a block tag was open not equal to this tag.
-							$addClosingTags[] = $element['type'];
+							$addClosingTags[] = $element;
 						}
 
 						if (!empty($addClosingTags))
@@ -2264,6 +2264,10 @@ function create_control_verification(&$verificationOptions, $do_test = false)
 		{
 			// Bit of a shortcut this.
 			$row = &$modSettings['question_id_cache']['questions'][$q];
+
+			if (empty($row['question']))
+				continue;
+
 			$thisVerification['questions'][] = array(
 				'id' => $q,
 				'q' => parse_bbc($row['question']),

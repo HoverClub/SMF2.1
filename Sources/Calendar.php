@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2022 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.2
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -500,8 +500,6 @@ function CalendarPost()
 		'name' => $context['page_title'],
 	);
 
-	loadDatePicker('#event_time_input .date_input');
-	loadTimePicker('#event_time_input .time_input', $time_string);
 	loadDatePair('#event_time_input', 'date_input', 'time_input');
 	addInlineJavaScript('
 	$("#allday").click(function(){

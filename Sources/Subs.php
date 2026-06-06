@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2023 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.4
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -716,6 +716,8 @@ function timeformat($log_time, $show_today = true, $tzid = null)
 	global $context, $user_info, $txt, $modSettings;
 	static $today;
 
+	$log_time = min(max($log_time, PHP_INT_MIN), PHP_INT_MAX);
+
 	// Ensure required values are set
 	$user_info['time_format'] = !empty($user_info['time_format']) ? $user_info['time_format'] : (!empty($modSettings['time_format']) ? $modSettings['time_format'] : '%F %H:%M');
 
@@ -900,7 +902,7 @@ function get_date_or_time_format($type = '', $format = '')
  *     If null, uses default time zone.
  * @return string The formatted datetime string.
  */
-function smf_strftime(string $format, int $timestamp = null, string $tzid = null)
+function smf_strftime(string $format, $timestamp = null, $tzid = null)
 {
 	global $txt, $smcFunc, $sourcedir;
 
@@ -912,6 +914,8 @@ function smf_strftime(string $format, int $timestamp = null, string $tzid = null
 
 	if (!isset($tzid))
 		$tzid = date_default_timezone_get();
+
+	$timestamp = min(max($timestamp, PHP_INT_MIN), PHP_INT_MAX);
 
 	// A few substitutions to make life easier.
 	$format = strtr($format, array(
@@ -1223,7 +1227,7 @@ function smf_strftime(string $format, int $timestamp = null, string $tzid = null
  *     If null, defaults to the current time.
  * @return string The formatted datetime string.
  */
-function smf_gmstrftime(string $format, int $timestamp = null)
+function smf_gmstrftime(string $format, $timestamp = null)
 {
 	return smf_strftime($format, $timestamp, 'UTC');
 }
@@ -1769,6 +1773,9 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 						// Image.
 						if (!empty($currentAttachment['is_image']))
 						{
+							// Just viewing the page shouldn't increase the download count for embedded images.
+							$currentAttachment['href'] .= ';preview';
+
 							if (empty($params['{width}']) && empty($params['{height}']))
 								$returnContext .= '<img src="' . $currentAttachment['href'] . '"' . $alt . $title . ' class="bbc_img">';
 							else
@@ -3482,7 +3489,7 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 		}
 
 		// Item codes are complicated buggers... they are implicit [li]s and can make [list]s!
-		if ($smileys !== false && $tag === null && isset($itemcodes[$message[$pos + 1]]) && $message[$pos + 2] == ']' && !isset($disabled['list']) && !isset($disabled['li']))
+		if ($smileys !== false && $tag === null && isset($itemcodes[$message[$pos + 1]], $message[$pos + 2]) && $message[$pos + 2] == ']' && !isset($disabled['list']) && !isset($disabled['li']))
 		{
 			if ($message[$pos + 1] == '0' && !in_array($message[$pos - 1], array(';', ' ', "\t", "\n", '>')))
 				continue;
@@ -3654,17 +3661,21 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 			// The value may be quoted for some tags - check.
 			if (isset($tag['quoted']))
 			{
-				$quoted = substr($message, $pos1, 6) == '&quot;';
+				// Anything passed through the preparser will use &quot;,
+				// but we need to handle raw quotation marks too.
+				$quot = substr($message, $pos1, 1) === '"' ? '"' : '&quot;';
+
+				$quoted = substr($message, $pos1, strlen($quot)) == $quot;
 				if ($tag['quoted'] != 'optional' && !$quoted)
 					continue;
 
 				if ($quoted)
-					$pos1 += 6;
+					$pos1 += strlen($quot);
 			}
 			else
 				$quoted = false;
 
-			$pos2 = strpos($message, $quoted == false ? ']' : '&quot;]', $pos1);
+			$pos2 = strpos($message, $quoted == false ? ']' : $quot . ']', $pos1);
 			if ($pos2 === false)
 				continue;
 
@@ -3673,7 +3684,7 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 				continue;
 
 			$data = array(
-				substr($message, $pos2 + ($quoted == false ? 1 : 7), $pos3 - ($pos2 + ($quoted == false ? 1 : 7))),
+				substr($message, $pos2 + ($quoted == false ? 1 : 1 + strlen($quot)), $pos3 - ($pos2 + ($quoted == false ? 1 : 1 + strlen($quot)))),
 				substr($message, $pos1, $pos2 - $pos1)
 			);
 
@@ -3756,29 +3767,32 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 			// The value may be quoted for some tags - check.
 			if (isset($tag['quoted']))
 			{
-				$quoted = substr($message, $pos1, 6) == '&quot;';
+				// Will normally be '&quot;' but might be '"'.
+				$quot = substr($message, $pos1, 1) === '"' ? '"' : '&quot;';
+
+				$quoted = substr($message, $pos1, strlen($quot)) == $quot;
 				if ($tag['quoted'] != 'optional' && !$quoted)
 					continue;
 
 				if ($quoted)
-					$pos1 += 6;
+					$pos1 += strlen($quot);
 			}
 			else
 				$quoted = false;
 
 			if ($quoted)
 			{
-				$end_of_value = strpos($message, '&quot;]', $pos1);
-				$nested_tag = strpos($message, '=&quot;', $pos1);
+				$end_of_value = strpos($message, $quot . ']', $pos1);
+				$nested_tag = strpos($message, '=' . $quot, $pos1);
 				// Check so this is not just an quoted url ending with a =
-				if ($nested_tag && substr($message, $nested_tag, 8) == '=&quot;]')
+				if ($nested_tag && substr($message, $nested_tag, 2 + strlen($quot)) == '=' . $quot . ']')
 					$nested_tag = false;
 				if ($nested_tag && $nested_tag < $end_of_value)
 					// Nested tag with quoted value detected, use next end tag
-					$nested_tag_pos = strpos($message, $quoted == false ? ']' : '&quot;]', $pos1) + 6;
+					$nested_tag_pos = strpos($message, $quoted == false ? ']' : $quot, $pos1) + strlen($quot);
 			}
 
-			$pos2 = strpos($message, $quoted == false ? ']' : '&quot;]', isset($nested_tag_pos) ? $nested_tag_pos : $pos1);
+			$pos2 = strpos($message, $quoted == false ? ']' : $quot . ']', isset($nested_tag_pos) ? $nested_tag_pos : $pos1);
 			if ($pos2 === false)
 				continue;
 
@@ -3797,7 +3811,7 @@ function parse_bbc($message, $smileys = true, $cache_id = '', $parse_tags = arra
 			$open_tags[] = $tag;
 
 			$code = strtr($tag['before'], array('$1' => $data));
-			$message = substr($message, 0, $pos) . "\n" . $code . "\n" . substr($message, $pos2 + ($quoted == false ? 1 : 7));
+			$message = substr($message, 0, $pos) . "\n" . $code . "\n" . substr($message, $pos2 + ($quoted == false ? 1 : 1 + strlen($quot)));
 			$pos += strlen($code) - 1 + 2;
 		}
 
@@ -3979,14 +3993,21 @@ function highlight_php_code($code)
 
 	$oldlevel = error_reporting(0);
 
-	$buffer = str_replace(array("\n", "\r"), '', @highlight_string($code, true));
+	$buffer = str_replace(array("\n", "\r"), array('<br />', ''), @highlight_string($code, true));
 
 	error_reporting($oldlevel);
 
 	// Yes, I know this is kludging it, but this is the best way to preserve tabs from PHP :P.
-	$buffer = preg_replace('~SMF_TAB(?:</(?:font|span)><(?:font color|span style)="[^"]*?">)?\\(\\);~', '<pre style="display: inline;">' . "\t" . '</pre>', $buffer);
+	$buffer = preg_replace('~SMF_TAB(?:</(?:font|span)><(?:font color|span style)="[^"]*?">)?\(\);~', '<span style="white-space: pre-wrap;">' . "\t" . '</span>', $buffer);
 
-	return strtr($buffer, array('\'' => '&#039;', '<code>' => '', '</code>' => ''));
+	// PHP 8.3 changed the returned HTML.
+	$buffer = preg_replace('/^(<pre>)?<code[^>]*>|<\/code>(<\/pre>)?$/', '', $buffer);
+
+	// Remove line breaks inserted before & after the actual code in php < 8.3
+	$buffer = preg_replace('/^(<span\s[^>]*>)<br \/>/', '$1', $buffer);
+	$buffer = preg_replace('/<br \/>(<\/span[^>]*>)<br \/>$/', '$1', $buffer);
+
+	return strtr($buffer, ['\'' => '&#039;']);
 }
 
 /**
@@ -4009,7 +4030,8 @@ function get_proxied_url($url)
 	$parsedurl = parse_iri($url);
 
 	// Don't bother with HTTPS URLs, schemeless URLs, or obviously invalid URLs
-	if (empty($parsedurl['scheme']) || empty($parsedurl['host']) || empty($parsedurl['path']) || $parsedurl['scheme'] === 'https')
+	// Don't proxy localhost or IP addresses, either
+	if (empty($parsedurl['scheme']) || empty($parsedurl['host']) || empty($parsedurl['path']) || $parsedurl['scheme'] === 'https' || $parsedurl['host'] === 'localhost' || filter_var($parsedurl['host'], FILTER_VALIDATE_IP) !== false)
 		return $url;
 
 	// We don't need to proxy our own resources
@@ -4048,34 +4070,25 @@ function redirectexit($setLocation = '', $refresh = false, $permanent = false)
 	if ($add)
 		$setLocation = $scripturl . ($setLocation != '' ? '?' . $setLocation : '');
 
-	// Put the session ID in.
-	if (defined('SID') && SID != '')
-		$setLocation = preg_replace('/^' . preg_quote($scripturl, '/') . '(?!\?' . preg_quote(SID, '/') . ')\\??/', $scripturl . '?' . SID . ';', $setLocation);
 	// Keep that debug in their for template debugging!
-	elseif (isset($_GET['debug']))
+	if (isset($_GET['debug']))
 		$setLocation = preg_replace('/^' . preg_quote($scripturl, '/') . '\\??/', $scripturl . '?debug;', $setLocation);
 
 	if (!empty($modSettings['queryless_urls']) && (empty($context['server']['is_cgi']) || ini_get('cgi.fix_pathinfo') == 1 || @get_cfg_var('cgi.fix_pathinfo') == 1) && (!empty($context['server']['is_apache']) || !empty($context['server']['is_lighttpd']) || !empty($context['server']['is_litespeed'])))
 	{
-		if (defined('SID') && SID != '')
-			$setLocation = preg_replace_callback(
-				'~^' . preg_quote($scripturl, '~') . '\?(?:' . SID . '(?:;|&|&amp;))((?:board|topic)=[^#]+?)(#[^"]*?)?$~',
-				function($m) use ($scripturl)
-				{
-					return $scripturl . '/' . strtr("$m[1]", '&;=', '//,') . '.html?' . SID . (isset($m[2]) ? "$m[2]" : "");
-				},
-				$setLocation
-			);
-		else
-			$setLocation = preg_replace_callback(
-				'~^' . preg_quote($scripturl, '~') . '\?((?:board|topic)=[^#"]+?)(#[^"]*?)?$~',
-				function($m) use ($scripturl)
-				{
-					return $scripturl . '/' . strtr("$m[1]", '&;=', '//,') . '.html' . (isset($m[2]) ? "$m[2]" : "");
-				},
-				$setLocation
-			);
+		$setLocation = preg_replace_callback(
+			'~^' . preg_quote($scripturl, '~') . '\?((?:board|topic)=[^#"]+?)(#[^"]*?)?$~',
+			function($m) use ($scripturl)
+			{
+				return $scripturl . '/' . strtr("$m[1]", '&;=', '//,') . '.html' . (isset($m[2]) ? "$m[2]" : "");
+			},
+			$setLocation
+		);
 	}
+
+	// The request was from ajax/xhr/other api call, append ajax ot the url.
+	if (!empty($context['from_ajax']))
+		$setLocation .= (strpos($setLocation, '?') ? ';' : '?') . 'ajax';
 
 	// Maybe integrations want to change where we are heading?
 	call_integration_hook('integrate_redirect', array(&$setLocation, &$refresh, &$permanent));
@@ -4178,7 +4191,7 @@ function obExit($header = null, $do_footer = null, $from_index = false, $from_fa
 	}
 
 	// Remember this URL in case someone doesn't like sending HTTP_REFERER.
-	if ($should_log)
+	if ($should_log && !isset($_REQUEST['xml']))
 		$_SESSION['old_url'] = $_SERVER['REQUEST_URL'];
 
 	// For session check verification.... don't switch browsers...
@@ -5322,7 +5335,7 @@ function text2words($text, $max_chars = 20, $encrypt = false)
 		$returned_words = array();
 		foreach ($words as $word)
 			if (($word = trim($word, '-_\'')) !== '')
-				$returned_words[] = $max_chars === null ? $word : substr($word, 0, $max_chars);
+				$returned_words[] = $max_chars === null ? $word : $smcFunc['truncate']($word, $max_chars);
 
 		// Filter out all words that occur more than once.
 		return array_unique($returned_words);
@@ -5836,7 +5849,7 @@ function add_integration_function($hook, $function, $permanent = true, $file = '
 
 			// Cleanup enabled/disabled variants before taking action.
 			$current_functions = array_diff($current_functions, array($enabled_call, $disabled_call));
-	
+
 			$permanent_functions = array_unique(array_merge($current_functions, array($integration_call)));
 		}
 		else
@@ -6349,16 +6362,20 @@ function get_mime_type($data, $is_path = false)
  * @param string $data The data to check, or the path or URL of a file to check.
  * @param string $type_pattern A regex pattern to match the acceptable MIME types.
  * @param string $is_path If true, $data is a path or URL to a file.
+ * @param string &mime_type Will be set to the detected MIME type.
  * @return int 1 if the detected MIME type matches the pattern, 0 if it doesn't, or 2 if we can't check.
  */
-function check_mime_type($data, $type_pattern, $is_path = false)
+function check_mime_type($data, $type_pattern, $is_path = false, &$mime_type = '')
 {
 	// Get the MIME type.
 	$mime_type = get_mime_type($data, $is_path);
 
 	// Couldn't determine it.
 	if ($mime_type === false)
+	{
+		$mime_type = '';
 		return 2;
+	}
 
 	// Check whether the MIME type matches expectations.
 	return (int) @preg_match('~' . $type_pattern . '~', $mime_type);
@@ -7039,10 +7056,10 @@ function _safe_unserialize($str)
 	if (empty($str) || !is_string($str))
 		return false;
 
-	// The substring 'O:' is used to serialize objects.
-	// If it is not present, then there are none in the serialized data.
-	if (strpos($str, 'O:') === false)
-		return unserialize($str);
+	// The substrings 'O' and 'C' are used to serialize objects.
+	// If they are not present, then there are none in the serialized data.
+	if (strpos($str, 'O:') === false && strpos($str, 'C:') === false)
+		return unserialize($str, ['allowed_classes' => false]);
 
 	$stack = array();
 	$expected = array();
@@ -8170,7 +8187,7 @@ function send_http_status($code, $status = '')
 		503 => 'Service Unavailable',
 	);
 
-	$protocol = preg_match('~^\s*(HTTP/[12]\.\d)\s*$~i', $_SERVER['SERVER_PROTOCOL'], $matches) ? $matches[1] : 'HTTP/1.0';
+	$protocol = !empty($_SERVER['SERVER_PROTOCOL']) && preg_match('~^\s*(HTTP/[12]\.\d)\s*$~i', $_SERVER['SERVER_PROTOCOL'], $matches) ? $matches[1] : 'HTTP/1.0';
 
 	// Typically during these requests, we have cleaned the response (ob_*clean), ensure these headers exist.
 	require_once($sourcedir . '/Security.php');

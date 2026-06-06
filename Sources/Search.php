@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2023 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.4
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -33,6 +33,10 @@ function PlushSearch1()
 	// Is the load average too high to allow searching just now?
 	if (!empty($context['load_average']) && !empty($modSettings['loadavg_search']) && $context['load_average'] >= $modSettings['loadavg_search'])
 		fatal_lang_error('loadavg_search_disabled', false);
+
+	// You cannot search with cookies disabled when captcha is required for guest searches
+	if (empty($_COOKIE) && !empty($modSettings['search_enable_captcha']))
+		fatal_lang_error('func_cookie_error', false);
 
 	loadLanguage('Search');
 	// Don't load this in XML mode.
@@ -1278,10 +1282,27 @@ function PlushSearch2()
 			}
 			else
 			{
+				// For MySQL, check whether the MEMORY engine is enabled.
+				$engines = array();
+
+				if ($smcFunc['db_title'] === MYSQL_TITLE)
+				{
+					$request = $smcFunc['db_query']('', 'SHOW ENGINES', array());
+
+					while ($row = $smcFunc['db_fetch_assoc']($request))
+					{
+						if ($row['Support'] == 'YES' || $row['Support'] == 'DEFAULT')
+							$engines[] = $row['Engine'];
+					}
+
+					$smcFunc['db_free_result']($request);
+				}
+
 				$main_query = array(
 					'select' => array(
 						'id_search' => $_SESSION['search_cache']['id_search'],
 						'relevance' => '0',
+						'id_topic' => 't.id_topic',
 					),
 					'weights' => array(),
 					'from' => '{db_prefix}topics AS t',
@@ -1306,7 +1327,6 @@ function PlushSearch2()
 
 				if (empty($search_params['topic']) && empty($search_params['show_complete']))
 				{
-					$main_query['select']['id_topic'] = 't.id_topic';
 					$main_query['select']['id_msg'] = 'MAX(m.id_msg) AS id_msg';
 					$main_query['select']['num_matches'] = 'COUNT(*) AS num_matches';
 
@@ -1316,8 +1336,6 @@ function PlushSearch2()
 				}
 				else
 				{
-					// This is outrageous!
-					$main_query['select']['id_topic'] = 'm.id_msg AS id_topic';
 					$main_query['select']['id_msg'] = 'm.id_msg';
 					$main_query['select']['num_matches'] = '1 AS num_matches';
 
@@ -1336,7 +1354,7 @@ function PlushSearch2()
 						$main_query['parameters']['topic'] = $search_params['topic'];
 					}
 					if (!empty($search_params['show_complete']))
-						$main_query['group_by'][] = 'm.id_msg, t.id_first_msg, t.id_last_msg';
+						$main_query['group_by'][] = 't.id_topic, m.id_msg, t.id_first_msg, t.id_last_msg';
 				}
 
 				// *** Get the subject results.
@@ -1354,7 +1372,7 @@ function PlushSearch2()
 						CREATE TEMPORARY TABLE {db_prefix}tmp_log_search_topics (
 							id_topic int NOT NULL default {string:string_zero},
 							PRIMARY KEY (id_topic)
-						) ENGINE=MEMORY',
+						)' . (in_array('MEMORY', $engines) ? ' ENGINE=MEMORY' : ''),
 						array(
 							'string_zero' => '0',
 						)
@@ -1544,7 +1562,7 @@ function PlushSearch2()
 						CREATE TEMPORARY TABLE {db_prefix}tmp_log_search_messages (
 							id_msg int NOT NULL default {string:string_zero},
 							PRIMARY KEY (id_msg)
-						) ENGINE=MEMORY',
+						)' . (in_array('MEMORY', $engines) ? ' ENGINE=MEMORY' : ''),
 						array(
 							'string_zero' => '0',
 						)
@@ -1849,7 +1867,7 @@ function PlushSearch2()
 		// *** Retrieve the results to be shown on the page
 		$participants = array();
 		$request = $smcFunc['db_search_query']('', '
-			SELECT ' . (empty($search_params['topic']) ? 'lsr.id_topic' : $search_params['topic'] . ' AS id_topic') . ', lsr.id_msg, lsr.relevance, lsr.num_matches
+			SELECT lsr.id_topic, lsr.id_msg, lsr.relevance, lsr.num_matches
 			FROM {db_prefix}log_search_results AS lsr' . ($search_params['sort'] == 'num_replies' || !empty($approve_query) ? '
 				INNER JOIN {db_prefix}topics AS t ON (t.id_topic = lsr.id_topic)' : '') . '
 			WHERE lsr.id_search = {int:id_search}' . $approve_query . '

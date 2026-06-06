@@ -1,5 +1,5 @@
 <?php
-// Version: 2.1.3; Help
+// Version: 2.1.5; Help
 
 global $helptxt, $scripturl;
 
@@ -421,6 +421,9 @@ $helptxt['deny_boards_access'] = 'Checking this setting will allow you to deny a
 // argument(s): scripturl
 $helptxt['who_enabled'] = 'This setting allows you to turn on or off the <a href="%1$s?action=who" target="_blank" rel="noopener">Who\'s Online</a> page, which shows who is browsing the forum and what they are doing.';
 
+$helptxt['no_guest_logging'] = 'This setting prevents guests from being included in the Users Online counts. Guest and bot activity can cause excessive IO, so this may help during a bot attack.';
+$helptxt['no_guest_views'] = 'This setting disables incrementing views for guests as well as bots.  Bot activity can cause excessive IO, and is often disguised as guest activity, so this may help during a bot attack.';
+
 $helptxt['recycle_enable'] = '&quot;Recycles&quot; deleted topics and posts to the specified board.';
 
 $helptxt['enableReportPM'] = 'This setting allows your users to report personal messages they receive to the administration team. This may be useful in helping to track down any abuse of the personal messaging system.';
@@ -460,8 +463,8 @@ $helptxt['password_strength'] = 'This setting determines the strength required f
 	</ul>';
 $helptxt['enable_password_conversion'] = 'By enabling this setting, SMF will attempt to detect passwords stored in other formats and convert them to the format SMF uses. Typically this is used for forums converted to SMF, but may have other uses as well. Disabling this prevents a user from logging in using their password after a conversion and they would need to reset their password.';
 
-$helptxt['coppaAge'] = 'The value specified in this box will determine the minimum age that new members must be in order to be granted immediate access to the forums.
-	On registration they will be prompted to confirm whether they are over this age, and if not will either have their application rejected or suspended awaiting parental approval - dependant on the type of restriction chosen.
+$helptxt['coppaAge'] = 'The value specified in this box will determine the minimum age that new members must be in order to be granted immediate access to the forum.
+	On registration they will be prompted to confirm whether they are over this age, and if not will either have their application rejected or suspended awaiting parental approval - dependent on the type of restriction chosen.
 	If a value of 0 is chosen for this setting then all other age restriction settings shall be ignored.';
 $helptxt['coppaType'] = 'If age restrictions are enabled, then this setting will define what happens when a user below the minimum age attempts to register with your forum. There are two possible choices:
 	<ul class="normallist">

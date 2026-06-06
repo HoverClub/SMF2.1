@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2023 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.4
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -70,7 +70,7 @@ function smf_db_create_word_search($size)
 			id_word {raw:size} unsigned NOT NULL default {string:string_zero},
 			id_msg int(10) unsigned NOT NULL default {string:string_zero},
 			PRIMARY KEY (id_word, id_msg)
-		) ENGINE=InnoDB',
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci',
 		array(
 			'string_zero' => '0',
 			'size' => $size,

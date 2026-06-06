@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2022 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.3
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -1329,6 +1329,12 @@ function QuickModeration()
 	updateSettings(array(
 		'calendar_updated' => time(),
 	));
+	
+	if (!empty($cache_enable) && $cache_enable >= 3) {
+		foreach ($affectedBoards as $b => $junk) {
+			cache_put_data('board-' . $b, null);
+		}
+	}
 
 	if (!empty($affectedBoards))
 		updateLastMessages(array_keys($affectedBoards));

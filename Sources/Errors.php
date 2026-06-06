@@ -9,10 +9,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2022 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.2
+ * @version 2.1.5
  */
 
 if (!defined('SMF'))
@@ -135,11 +135,18 @@ function log_error($error_message, $error_type = 'general', $file = null, $line 
 			$query = $smcFunc['db_query']('', '
 				SELECT COUNT(*)
 				FROM {db_prefix}log_errors',
-				array()
+				array(
+					'db_error_skip' => true,
+				)
 			);
 
-			list($context['num_errors']) = $smcFunc['db_fetch_row']($query);
-			$smcFunc['db_free_result']($query);
+			if ($query)
+			{
+				list($context['num_errors']) = $smcFunc['db_fetch_row']($query);
+				$smcFunc['db_free_result']($query);
+			}
+			else
+				$context['num_errors'] = 0;
 		}
 		else
 			$context['num_errors']++;
@@ -334,6 +341,28 @@ function smf_error_handler($error_level, $error_string, $file, $line)
 }
 
 /**
+ * Generic handler for uncaught exceptions.
+ *
+ * Always ends execution.
+ *
+ * @param \Throwable $e The uncaught exception.
+ */
+function smf_exception_handler(\Throwable $e)
+{
+	global $modSettings, $txt;
+
+	loadLanguage('Errors');
+
+	$message = $txt[$e->getMessage()] ?? $e->getMessage();
+
+	if (!empty($modSettings['enableErrorLogging'])) {
+		log_error($message, 'general', $e->getFile(), $e->getLine());
+	}
+
+	fatal_error($message, false);
+}
+
+/**
  * It is called by {@link fatal_error()} and {@link fatal_lang_error()}.
  *
  * @uses template_fatal_error()
@@ -405,7 +434,7 @@ function setup_fatal_error_context($error_message, $error_code = null)
 		PROGRAM FLOW.  Otherwise, security error messages will not be shown, and
 		your forum will be in a very easily hackable state.
 	*/
-	trigger_error('No direct access...', E_USER_ERROR);
+	die('No direct access...');
 }
 
 /**
@@ -560,8 +589,13 @@ function log_error_online($error, $sprintf = array())
 		WHERE session = {string:session}',
 		array(
 			'session' => $session_id,
+			'db_error_skip' => true,
 		)
 	);
+
+	if (!$request)
+		return;
+
 	if ($smcFunc['db_num_rows']($request) != 0)
 	{
 		// If this happened very early on in SMF startup, $smcFunc may not fully be defined.

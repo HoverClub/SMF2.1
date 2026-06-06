@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2023 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.4
+ * @version 2.1.7
  */
 
 use SMF\Cache\CacheApi;
@@ -115,10 +115,12 @@ function reloadSettings()
 		{
 			return (string) $string;
 		};
-	$fix_utf8mb4 = function($string) use ($utf8, $smcFunc)
+	$smcFunc['fix_utf8mb4'] = function($string) use ($utf8, $smcFunc)
 	{
 		if (!$utf8 || $smcFunc['db_mb4'])
 			return $string;
+
+		$string = (string) $string;
 
 		$i = 0;
 		$len = strlen($string);
@@ -162,11 +164,11 @@ function reloadSettings()
 			$num = $string[0] === 'x' ? hexdec(substr($string, 1)) : (int) $string;
 			return $num < 0x20 || $num > 0x10FFFF || ($num >= 0xD800 && $num <= 0xDFFF) || $num === 0x202E || $num === 0x202D ? '' : '&#' . $num . ';';
 		},
-		'htmlspecialchars' => function($string, $quote_style = ENT_COMPAT, $charset = 'ISO-8859-1') use ($ent_check, $utf8, $fix_utf8mb4, &$smcFunc)
+		'htmlspecialchars' => function($string, $quote_style = ENT_COMPAT, $charset = 'ISO-8859-1') use ($ent_check, $utf8, &$smcFunc)
 		{
 			$string = $smcFunc['normalize']($string);
 
-			return $fix_utf8mb4($ent_check(htmlspecialchars($string, $quote_style, $utf8 ? 'UTF-8' : $charset)));
+			return $smcFunc['fix_utf8mb4']($ent_check(htmlspecialchars($string, $quote_style, $utf8 ? 'UTF-8' : $charset)));
 		},
 		'htmltrim' => function($string) use ($utf8, $ent_check)
 		{
@@ -220,9 +222,9 @@ function reloadSettings()
 		'truncate' => function($string, $length) use ($utf8, $ent_check, $ent_list, &$smcFunc)
 		{
 			$string = $ent_check($string);
-			preg_match('~^(' . $ent_list . '|.){' . $smcFunc['strlen'](substr($string, 0, $length)) . '}~' . ($utf8 ? 'u' : ''), $string, $matches);
+			preg_match('~^(' . $ent_list . '|.){' . $smcFunc['strlen']($smcFunc['substr']($string, 0, $length)) . '}~' . ($utf8 ? 'u' : ''), $string, $matches);
 			$string = $matches[0];
-			while (strlen($string) > $length)
+			while ($smcFunc['strlen']($string) > $length)
 				$string = preg_replace('~(?:' . $ent_list . '|.)$~' . ($utf8 ? 'u' : ''), '', $string);
 			return $string;
 		},
@@ -234,7 +236,7 @@ function reloadSettings()
 		{
 			return $smcFunc['convert_case']($string, 'ucwords');
 		},
-		'convert_case' => function($string, $case, $simple = false, $form = 'c') use (&$smcFunc, $utf8, $ent_check, $fix_utf8mb4, $sourcedir)
+		'convert_case' => function($string, $case, $simple = false, $form = 'c') use (&$smcFunc, $utf8, $ent_check, $sourcedir)
 		{
 			if (!$utf8)
 			{
@@ -245,7 +247,7 @@ function reloadSettings()
 						break;
 
 					case 'lower':
-					case 'fold';
+					case 'fold':
 						$string = strtolower($string);
 						break;
 
@@ -295,7 +297,7 @@ function reloadSettings()
 				}
 			}
 
-			return $fix_utf8mb4($string);
+			return $smcFunc['fix_utf8mb4']($string);
 		},
 		'json_decode' => 'smf_json_decode',
 		'json_encode' => 'json_encode',
@@ -489,7 +491,8 @@ function reloadSettings()
 		IMAGETYPE_BMP => 'bmp',
 		IMAGETYPE_TIFF_II => 'tiff',
 		IMAGETYPE_TIFF_MM => 'tiff',
-		IMAGETYPE_IFF => 'iff'
+		IMAGETYPE_IFF => 'iff',
+		IMAGETYPE_WEBP => 'webp'
 	);
 
 	// Define a list of allowed tags for descriptions.
@@ -729,7 +732,16 @@ function loadUserSettings()
 			$area = !empty($_REQUEST['area']) ? $_REQUEST['area'] : '';
 			$action = !empty($_REQUEST['action']) ? $_REQUEST['action'] : '';
 
-			if ($row['total'] > 0 && !in_array($action, array('profile', 'logout')) || ($action == 'profile' && $area != 'tfasetup'))
+			if (
+				$row['total'] > 0
+				&& (
+					!in_array($action, array('profile', 'logout'))
+					|| (
+						$action == 'profile'
+						&& $area != 'tfasetup'
+					)
+				)
+			)
 				redirectexit('action=profile;area=tfasetup;forced');
 		}
 	}
@@ -926,7 +938,7 @@ function loadUserSettings()
 		$languages = getLanguages();
 
 		// Is it valid?
-		if (!empty($_GET['language']) && isset($languages[strtr($_GET['language'], './\\:', '____')]))
+		if (!empty($_GET['language']) && is_string($_GET['language']) && isset($languages[strtr($_GET['language'], './\\:', '____')]))
 		{
 			$user_info['language'] = strtr($_GET['language'], './\\:', '____');
 
@@ -3395,7 +3407,7 @@ function getLanguages($use_cache = true)
 
 		// Avoid confusion when we have more than one English variant installed.
 		// Honestly, our default English version should always have been called "English (US)"
-		if (substr_count(implode(' ', array_keys($context['languages'])), 'english') > 1 && $context['languages']['english']['name'] === 'English')
+		if (!empty($context['languages']) && is_array($context['languages']) && substr_count(implode(' ', array_keys($context['languages'])), 'english') > 1 && $context['languages']['english']['name'] === 'English')
 			$context['languages']['english']['name'] = 'English (US)';
 
 		// Let's cash in on this deal.

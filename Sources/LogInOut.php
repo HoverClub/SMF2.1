@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2022 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.3
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -27,7 +27,7 @@ if (!defined('SMF'))
  */
 function Login()
 {
-	global $txt, $context, $scripturl, $user_info;
+	global $txt, $context, $scripturl, $user_info, $modSettings;
 
 	// You are already logged in, go take a tour of the boards
 	if (!empty($user_info['id']))
@@ -81,6 +81,11 @@ function Login()
 		'url' => $scripturl . '?action=login',
 		'name' => $txt['login'],
 	);
+
+	// Ensure the session data persists.
+	if (empty($_COOKIE)) {
+		setLoginCookie(60 * $modSettings['cookieTime'], 0, '');
+	}
 
 	// Set the login URL - will be used when the login process is done (but careful not to send us to an attachment).
 	if (isset($_SESSION['old_url']) && strpos($_SESSION['old_url'], 'dlattach') === false && preg_match('~(board|topic)[=,]~', $_SESSION['old_url']) != 0)
@@ -164,7 +169,7 @@ function Login2()
 		else
 		{
 			loadLanguage('Errors');
-			trigger_error($txt['login_no_session_cookie'], E_USER_ERROR);
+			throw new \Exception('login_no_session_cookie');
 		}
 
 		$user_settings['password_salt'] = bin2hex($smcFunc['random_bytes'](16));
@@ -217,8 +222,12 @@ function Login2()
 		redirectexit();
 
 	// Are you guessing with a script?
-	checkSession();
-	validateToken('login');
+	// If cookies are disallowed, session & token checks will fail
+	if (!empty($_COOKIE))
+	{
+		checkSession();
+		validateToken('login');
+	}
 	spamProtection('login');
 
 	// Set the login_url if it's not already set (but careful not to send us to an attachment).
@@ -235,7 +244,7 @@ function Login2()
 	elseif (!empty($_POST['cookielength']) && ($_POST['cookielength'] >= 1 && $_POST['cookielength'] <= 3153600))
 		$modSettings['cookieTime'] = (int) $_POST['cookielength'];
 
-	loadLanguage('Login');
+	loadLanguage('Login+Errors');
 	// Load the template stuff.
 	loadTemplate('Login');
 	$context['sub_template'] = 'login';
@@ -255,6 +264,14 @@ function Login2()
 		'url' => $scripturl . '?action=login',
 		'name' => $txt['login'],
 	);
+
+	// Cookies are required...
+	if (empty($_COOKIE))
+	{
+		setLoginCookie(60 * $modSettings['cookieTime'], 0, '');
+		$context['login_errors'] = array($txt['login_cookie_error']);
+		return;
+	}
 
 	// You forgot to type your username, dummy!
 	if (!isset($_POST['user']) || $_POST['user'] == '')

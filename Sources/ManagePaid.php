@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2023 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.4
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -117,7 +117,8 @@ function ModifySubscriptionSettings($return_config = false)
 				'email',
 				'paid_email_to',
 				'subtext' => $txt['paid_email_to_desc'],
-				'size' => 60
+				'size' => 60,
+				'multiple' => true
 			),
 			'',
 
@@ -1943,7 +1944,7 @@ function loadSubscriptions()
 		$context['subscriptions'][$row['id_subscribe']] = array(
 			'id' => $row['id_subscribe'],
 			'name' => $row['name'],
-			'desc' => $row['description'],
+			'desc' => parse_bbc($row['description']),
 			'cost' => $cost,
 			'real_cost' => $row['cost'],
 			'length' => $length,

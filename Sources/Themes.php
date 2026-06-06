@@ -24,10 +24,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2022 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.0
+ * @version 2.1.5
  */
 
 if (!defined('SMF'))
@@ -1424,6 +1424,8 @@ function InstallCopy()
 function InstallDir()
 {
 	global $themedir, $themeurl, $context;
+
+	$_REQUEST['theme_dir'] = rtrim($_REQUEST['theme_dir'], '\\/');
 
 	// Cannot use the theme dir as a theme dir.
 	if (!isset($_REQUEST['theme_dir']) || empty($_REQUEST['theme_dir']) || rtrim(realpath($_REQUEST['theme_dir']), '/\\') == realpath($themedir))

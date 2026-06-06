@@ -7,23 +7,23 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2023 Simple Machines and individual contributors
+ * @copyright 2026 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.4
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
 	define('SMF', 'PROXY');
 
 if (!defined('SMF_VERSION'))
-	define('SMF_VERSION', '2.1.4');
+	define('SMF_VERSION', '2.1.7');
 
 if (!defined('SMF_FULL_VERSION'))
 	define('SMF_FULL_VERSION', 'SMF ' . SMF_VERSION);
 
 if (!defined('SMF_SOFTWARE_YEAR'))
-	define('SMF_SOFTWARE_YEAR', '2023');
+	define('SMF_SOFTWARE_YEAR', '2026');
 
 if (!defined('JQUERY_VERSION'))
 	define('JQUERY_VERSION', '3.6.3');
@@ -115,6 +115,8 @@ class ProxyServer
 	 */
 	public function checkRequest()
 	{
+		global $boardurl;
+
 		if (!$this->enabled)
 			return false;
 
@@ -132,6 +134,15 @@ class ProxyServer
 
 		$hash = $_GET['hash'];
 		$request = $_GET['request'];
+
+		// Just in case...
+		if (
+			filter_var(parse_url($request, PHP_URL_HOST), FILTER_VALIDATE_IP) !== false
+			|| parse_url($request, PHP_URL_HOST) === 'localhost'
+			|| parse_url($request, PHP_URL_HOST) === parse_url($boardurl, PHP_URL_HOST)
+		) {
+			return false;
+		}
 
 		if (hash_hmac('sha1', $request, $this->secret) != $hash)
 			return false;

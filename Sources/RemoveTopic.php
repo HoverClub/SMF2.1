@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2023 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.4
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -569,6 +569,12 @@ function removeTopics($topics, $decreasePostCount = true, $ignoreRecycling = fal
 	updateSettings(array(
 		'calendar_updated' => time(),
 	));
+	if (!empty($cache_enable) && $cache_enable >= 3) {
+		cache_put_data('board-' . $recycle_board, null);
+		foreach ($adjustBoards as $stats) {
+			cache_put_data('board-' . $stats['id_board'], null);
+		}
+	}
 
 	require_once($sourcedir . '/Subs-Post.php');
 	$updates = array();

@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2023 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.4
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -448,8 +448,6 @@ function determineActions($urls, $preferred_prefix = false)
 
 			if (isset($txt[$actions['error']]))
 				$error_message = str_replace('"', '&quot;', empty($actions['error_params']) ? $txt[$actions['error']] : vsprintf($txt[$actions['error']], (array) $actions['error_params']));
-			elseif ($actions['error'] == 'guest_login')
-				$error_message = str_replace('"', '&quot;', $txt['who_guest_login']);
 			else
 				$error_message = str_replace('"', '&quot;', $actions['error']);
 
@@ -611,10 +609,9 @@ function Credits($in_admin = false)
 					'title' => $txt['credits_groups_dev'],
 					'members' => array(
 						// Lead Developer
-						'Shawn Bulen',
+						'Jon "Sesquipedalian" Stovell',
 						// Developers
 						'John "live627" Rayes',
-						'Oscar "Ozp" Rydhé',
 
 						// Former Developers
 						'Aaron van Geffen',
@@ -625,7 +622,6 @@ function Credits($in_admin = false)
 						'emanuele',
 						'Hendrik Jan "Compuart" Visser',
 						'Jessica "Suki" González',
-						'Jon "Sesquipedalian" Stovell',
 						'Juan "JayBachatero" Hernandez',
 						'Karl "RegularExpression" Benson',
 						'Matthew "Labradoodle-360" Kerle',
@@ -633,8 +629,10 @@ function Credits($in_admin = false)
 						'Michael "Oldiesmann" Eshom',
 						'Michael "Thantos" Miller',
 						'Norv',
+						'Oscar "Ozp" Rydhé',
 						'Peter "Arantor" Spicer',
 						'Selman "[SiNaN]" Eser',
+						'Shawn Bulen',
 						'Shitiz "Dragooon" Garg',
 						// 'Spuds', // Doesn't want to be listed here
 						// 'Steven "Fustrate" Hoffman',
@@ -651,7 +649,6 @@ function Credits($in_admin = false)
 						// Support Specialists
 						'Doug Heffernan',
 						'lurkalot',
-						'Steve',
 
 						// Former Support Specialists
 						'Aleksi "Lex" Kilpinen',
@@ -676,6 +673,7 @@ function Credits($in_admin = false)
 						'Old Fossil',
 						'S-Ace',
 						'shadav',
+						'Steve',
 						'Storman™',
 						'Wade "sησω" Poulsen',
 						'xenovanis',
@@ -829,6 +827,7 @@ function Credits($in_admin = false)
 					'K@',
 					'metallica48423',
 					'Paul_Pauline',
+					'Rock Lee',
 				),
 			),
 		),

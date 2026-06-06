@@ -1,5 +1,5 @@
 <?php
-// Version: 2.1.0; ManageSettings
+// Version: 2.1.5; ManageSettings
 
 global $scripturl;
 
@@ -103,6 +103,8 @@ $txt['defaultMaxMembers'] = 'Members per page in member list';
 $txt['timeLoadPageEnable'] = 'Display time taken to create every page';
 $txt['disableHostnameLookup'] = 'Disable hostname lookups';
 $txt['who_enabled'] = 'Enable who\'s online list';
+$txt['no_guest_logging'] = 'Do not include guests or bots in Users Online stats';
+$txt['no_guest_views'] = 'Disable counting views for guests and bots';
 $txt['meta_keywords'] = 'Meta keywords associated with forum';
 $txt['meta_keywords_note'] = 'For search engines. Leave blank for default.';
 $txt['settings_error'] = 'Warning: Updating of Settings.php failed, the settings cannot be saved.';
@@ -253,7 +255,7 @@ $txt['signature_max_font_size'] = 'Maximum font size allowed in signatures (pixe
 $txt['signature_bbc'] = 'Enabled BBC tags';
 
 $txt['custom_profile_title'] = 'Custom Profile Fields';
-$txt['custom_profile_desc'] = 'From this page you can create your own custom profile fields that fit in with your own forums requirements';
+$txt['custom_profile_desc'] = 'From this page you can create your own custom profile fields that fit in with your own forum\'s requirements';
 $txt['custom_profile_active'] = 'Active';
 $txt['custom_profile_fieldname'] = 'Field Name';
 $txt['custom_profile_fieldtype'] = 'Field Type';

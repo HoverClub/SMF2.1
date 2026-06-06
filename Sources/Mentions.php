@@ -6,10 +6,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2022 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.0
+ * @version 2.1.7
  */
 
 /**
@@ -44,7 +44,8 @@ class Mentions
 
 		$request = $smcFunc['db_query']('', '
 			SELECT mem.id_member, mem.real_name, mem.email_address, mem.id_group, mem.id_post_group, mem.additional_groups,
-				mem.lngfile, ment.id_member AS id_mentioned_by, ment.real_name AS mentioned_by_name
+				mem.lngfile, ment.id_member AS id_mentioned_by, ment.real_name AS mentioned_by_name,
+				FIND_IN_SET(ment.id_member, mem.pm_ignore_list) AS mentioned_by_ignored
 			FROM {db_prefix}mentions AS m
 				INNER JOIN {db_prefix}members AS mem ON (mem.id_member = m.id_mentioned)
 				INNER JOIN {db_prefix}members AS ment ON (ment.id_member = m.id_member)
@@ -67,6 +68,8 @@ class Mentions
 				'mentioned_by' => array(
 					'id' => $row['id_mentioned_by'],
 					'name' => $row['mentioned_by_name'],
+					// Note that PostgreSQL can return a lowercase t/f for FIND_IN_SET
+					'ignored' => !empty($row['mentioned_by_ignored']) && $row['mentioned_by_ignored'] != 'f',
 				),
 				'lngfile' => $row['lngfile'],
 			);
@@ -302,7 +305,7 @@ class Mentions
 			$count = count($match);
 
 			for ($i = 1; $i <= $count; $i++)
-				$names[] = $smcFunc['htmlspecialchars']($smcFunc['htmltrim'](implode('', array_slice($match, 0, $i))));
+				$names[] = $smcFunc['htmlspecialchars']($smcFunc['htmltrim'](implode('', array_slice($match, 0, $i))), ENT_QUOTES);
 		}
 
 		$names = array_unique($names);

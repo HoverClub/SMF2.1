@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2023 Simple Machines and individual contributors
+ * @copyright 2025 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.4
+ * @version 2.1.7
  */
 
 if (!defined('SMF'))
@@ -489,7 +489,7 @@ function smf_db_change_column($table_name, $old_column, $column_info)
 		$column_info['auto'] = $old_info['auto'];
 	if (!isset($column_info['type']))
 		$column_info['type'] = $old_info['type'];
-	if (!isset($column_info['size']) || !is_numeric($column_info['size']))
+	if (!array_key_exists('size', $column_info) || (!is_numeric($column_info['size']) && !is_null($column_info['size'])))
 		$column_info['size'] = $old_info['size'];
 	if (!isset($column_info['unsigned']) || !in_array($column_info['type'], array('int', 'tinyint', 'smallint', 'mediumint', 'bigint')))
 		$column_info['unsigned'] = '';
@@ -794,9 +794,14 @@ function smf_db_calculate_type($type_name, $type_size = null, $reverse = false)
 		$type_name = $types[$type_name];
 	}
 
-	// Only char fields got size
-	if (strpos($type_name, 'char') === false)
+	if (
+		// We can't have a zero size.
+		$type_size === 0
+		// Only char fields have a size.
+		|| !str_contains($type_name, 'char')
+	) {
 		$type_size = null;
+	}
 
 	return array($type_name, $type_size);
 }
