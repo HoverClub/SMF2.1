@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2025 Simple Machines and individual contributors
+ * @copyright 2026 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.7
+ * @version 2.1.8
  */
 
 if (!defined('SMF'))
@@ -315,6 +315,9 @@ function determineActions($urls, $preferred_prefix = false)
 		'viewerrorlog' => array('admin_forum'),
 		'viewmembers' => array('moderate_forum'),
 	);
+	call_integration_hook('integrate_who_allowed', array(&$allowedActions));
+
+	// This hook is deprecated because it is missing the correct prefix.
 	call_integration_hook('who_allowed', array(&$allowedActions));
 
 	if (!is_array($urls))
@@ -558,6 +561,9 @@ function determineActions($urls, $preferred_prefix = false)
 		$smcFunc['db_free_result']($result);
 	}
 
+	call_integration_hook('integrate_whos_online_after', array(&$url_list, &$data));
+
+	// This hook is deprecated because it is missing the correct prefix.
 	call_integration_hook('whos_online_after', array(&$urls, &$data));
 
 	if (!is_array($urls))

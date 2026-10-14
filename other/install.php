@@ -8,10 +8,10 @@
  * @copyright 2026 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.7
+ * @version 2.1.8
  */
 
-define('SMF_VERSION', '2.1.7');
+define('SMF_VERSION', '2.1.8');
 define('SMF_FULL_VERSION', 'SMF ' . SMF_VERSION);
 define('SMF_SOFTWARE_YEAR', '2026');
 define('DB_SCRIPT_VERSION', '2-1');
@@ -1316,36 +1316,26 @@ function DatabasePopulation()
 	{
 		$incontext['allow_sm_stats'] = true;
 
-		// Attempt to register the site etc.
-		$fp = @fsockopen('www.simplemachines.org', 443, $errno, $errstr);
-		if (!$fp)
-			$fp = @fsockopen('www.simplemachines.org', 80, $errno, $errstr);
-		if ($fp)
-		{
-			$out = 'GET /smf/stats/register_stats.php?site=' . base64_encode($boardurl) . ' HTTP/1.1' . "\r\n";
-			$out .= 'Host: www.simplemachines.org' . "\r\n";
-			$out .= 'Connection: Close' . "\r\n\r\n";
-			fwrite($fp, $out);
+		$data = fetch_web_data('https://www.simplemachines.org/smf/stats/register_stats.php?site=' . base64_encode($boardurl));
 
-			$return_data = '';
-			while (!feof($fp))
-				$return_data .= fgets($fp, 128);
+		// Try one more time, this time without https.
+		if (empty($data)) {
+			$data = fetch_web_data('http://www.simplemachines.org/smf/stats/collect_stats.php?site=' . base64_encode($boardurl));
+		}
 
-			fclose($fp);
+		// Get the unique site ID.
+		preg_match('~SITE-ID:\s(\w{10})~', $data, $ID);
 
-			// Get the unique site ID.
-			preg_match('~SITE-ID:\s(\w{10})~', $return_data, $ID);
-
-			if (!empty($ID[1]))
-				$smcFunc['db_insert']('replace',
-					$db_prefix . 'settings',
-					array('variable' => 'string', 'value' => 'string'),
-					array(
-						array('sm_stats_key', $ID[1]),
-						array('enable_sm_stats', 1),
-					),
-					array('variable')
-				);
+		if (!empty($ID[1])) {
+			$smcFunc['db_insert']('replace',
+				$db_prefix . 'settings',
+				array('variable' => 'string', 'value' => 'string'),
+				array(
+					array('sm_stats_key', $ID[1]),
+					array('enable_sm_stats', 1),
+				),
+				array('variable')
+			);
 		}
 	}
 	// Don't remove stat collection unless we unchecked the box for real, not from the loop.
@@ -1618,13 +1608,13 @@ function AdminAccount()
 			$incontext['error'] = $txt['error_invalid_characters_username'];
 			return false;
 		}
-		elseif (empty($_POST['email']) || !filter_var($_POST['email'], FILTER_VALIDATE_EMAIL) || strlen($_POST['email']) > 255)
+		elseif (empty($_POST['email']) || !filter_var($_POST['email'], FILTER_VALIDATE_EMAIL) || filter_var($_POST['email'], FILTER_SANITIZE_EMAIL) !== $_POST['email'] || strlen($_POST['email']) > 255)
 		{
 			// One step back, this time fill out a proper admin email address.
 			$incontext['error'] = sprintf($txt['error_valid_admin_email_needed'], $_POST['username']);
 			return false;
 		}
-		elseif (empty($_POST['server_email']) || !filter_var($_POST['server_email'], FILTER_VALIDATE_EMAIL) || strlen($_POST['server_email']) > 255)
+		elseif (empty($_POST['server_email']) || !filter_var($_POST['server_email'], FILTER_VALIDATE_EMAIL) || filter_var($_POST['server_email'], FILTER_SANITIZE_EMAIL) !== $_POST['server_email'] || strlen($_POST['server_email']) > 255)
 		{
 			// One step back, this time fill out a proper admin email address.
 			$incontext['error'] = $txt['error_valid_server_email_needed'];

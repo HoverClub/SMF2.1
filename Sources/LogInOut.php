@@ -8,10 +8,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2025 Simple Machines and individual contributors
+ * @copyright 2026 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.7
+ * @version 2.1.8
  */
 
 if (!defined('SMF'))
@@ -27,7 +27,7 @@ if (!defined('SMF'))
  */
 function Login()
 {
-	global $txt, $context, $scripturl, $user_info, $modSettings;
+	global $txt, $context, $scripturl, $user_info, $modSettings, $smcFunc;
 
 	// You are already logged in, go take a tour of the boards
 	if (!empty($user_info['id']))
@@ -72,7 +72,7 @@ function Login()
 
 	// Get the template ready.... not really much else to do.
 	$context['page_title'] = $txt['login'];
-	$context['default_username'] = &$_REQUEST['u'];
+	$context['default_username'] = $smcFunc['htmlspecialchars']($_REQUEST['u'] ?? '');
 	$context['default_password'] = '';
 	$context['never_expire'] = false;
 

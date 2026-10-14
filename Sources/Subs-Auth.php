@@ -7,10 +7,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2025 Simple Machines and individual contributors
+ * @copyright 2026 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.5
+ * @version 2.1.8
  */
 
 if (!defined('SMF'))
@@ -128,8 +128,7 @@ function setLoginCookie($cookie_length, $id, $password = '')
 
 		// Recreate and restore the new session.
 		loadSession();
-		// @todo should we use session_regenerate_id(true); now that we are 5.1+
-		session_regenerate_id();
+		session_regenerate_id(true);
 		$_SESSION = $oldSessionData;
 
 		$_SESSION['login_' . $cookiename] = $data;

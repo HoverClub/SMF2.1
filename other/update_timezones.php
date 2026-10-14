@@ -5,10 +5,10 @@
  *
  * @package SMF
  * @author Simple Machines https://www.simplemachines.org
- * @copyright 2025 Simple Machines and individual contributors
+ * @copyright 2026 Simple Machines and individual contributors
  * @license https://www.simplemachines.org/about/smf/license.php BSD
  *
- * @version 2.1.6
+ * @version 2.1.8
  *
  * This is an internal development file. It should NOT be included in any SMF
  * distribution packages.
@@ -112,10 +112,8 @@ class TimezoneUpdater
 
 	/**
 	 * Used in places where an earliest date is required.
-	 *
-	 * To support 32-bit PHP builds, use '1901-12-13 20:45:52 UTC'
 	 */
-	const DATE_MIN = '-292277022657-01-27 08:29:52 UTC';
+	const DATE_MIN = '1901-12-13 20:45:52 UTC';
 
 	/**
 	 * Used in places where a latest date is required.
